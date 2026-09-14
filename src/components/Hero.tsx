@@ -16,7 +16,10 @@ export default function Hero() {
       />
       <div className="hero-content">
         <p className="hero-tagline">Hotels · Homes · Everything In</p>
-        <h1>EVERY INN</h1>
+        <h1>
+          EVERY INN
+          <span className="sr-only"> – Căn hộ mini & Khách sạn tự nhận phòng Phú Nhuận, TP.HCM</span>
+        </h1>
         <p className="hero-sub">Một nơi để vừa hòa mình vào nhịp sống Sài Gòn, vừa giữ cho mình một góc bình yên riêng.</p>
         <div className="hero-actions">
           <Link href="#pricing" className="btn-primary">Xem bảng giá</Link>

@@ -28,6 +28,14 @@ export default function Footer() {
           >
             @everyinn.home
           </a>
+          <a
+            href="https://maps.google.com/?cid=13693822161726077230"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Every Inn trên Google Maps"
+          >
+            Google Maps
+          </a>
           <a href="tel:+840906314109">0906.314.109</a>
           <a href="mailto:hi.everyinn@gmail.com">hi.everyinn@gmail.com</a>
         </div>

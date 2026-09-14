@@ -49,9 +49,9 @@ export default function Header() {
         </Link>
 
         <nav id="nav-links" className={`nav-links ${isNavOpen ? 'is-open' : ''}`} aria-label="Menu chính">
-          <Link href="#rooms" onClick={closeNav}>Hạng phòng</Link>
-          <Link href="#pricing" onClick={closeNav}>Bảng giá</Link>
-          <Link href="#location" onClick={closeNav}>Vị trí</Link>
+          <Link href="/#rooms" onClick={closeNav}>Hạng phòng</Link>
+          <Link href="/#pricing" onClick={closeNav}>Bảng giá</Link>
+          <Link href="/#location" onClick={closeNav}>Vị trí</Link>
           <a
             href="https://www.instagram.com/everyinn.home/"
             target="_blank"

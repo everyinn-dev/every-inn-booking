@@ -128,7 +128,7 @@ export const ROOMS: RoomInfo[] = [
     ],
     images: makeImages(ROOM_IMAGES.r102),
     videoUrl: '', 
-    tiktokEmbed: '',
+    tiktokEmbed: `<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@everyinn.home/video/7670910873006886165" data-video-id="7670910873006886165" style="max-width: 605px;min-width: 325px;" > <section> <a target="_blank" title="@everyinn.home" href="https://www.tiktok.com/@everyinn.home?refer=embed">@everyinn.home</a> Ra mắt homestay mới toanh tại trung tâm Sài Gòn 🥳 5 sao 🌟 đánh giá, có máy chiếu màn hình lớn cực chill lun nè ❤️ Home được thiết kế phong cách hiện đại, chuyên nghiệp, self-checkin tiện lợi bất kể ngày đêm và đảm bảo riêng tư nhóoo <a title="everyinnphanxichlong" target="_blank" href="https://www.tiktok.com/tag/everyinnphanxichlong?refer=embed">#EveryInnPhanXichLong</a> <a title="homestaysg" target="_blank" href="https://www.tiktok.com/tag/homestaysg?refer=embed">#homestaysg</a> <a title="homestaysaigon" target="_blank" href="https://www.tiktok.com/tag/homestaysaigon?refer=embed">#HomestaySaigon</a> <a title="staycation" target="_blank" href="https://www.tiktok.com/tag/staycation?refer=embed">#staycation</a> <a title="saigon" target="_blank" href="https://www.tiktok.com/tag/saigon?refer=embed">#saigon</a> <a target="_blank" title="♬ original sound - Just Create - JC" href="https://www.tiktok.com/music/original-sound-Just-Create-7577021211508230930?refer=embed">♬ original sound - Just Create - JC</a> </section> </blockquote>`,
   },
 
   {
@@ -158,7 +158,7 @@ export const ROOMS: RoomInfo[] = [
     ],
     images: makeImages(ROOM_IMAGES.r202),
     videoUrl: '', 
-    tiktokEmbed: '',
+    tiktokEmbed: `<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@everyinn.home/video/7668553883463109909" data-video-id="7668553883463109909" style="max-width: 605px;min-width: 325px;" > <section> <a target="_blank" title="@everyinn.home" href="https://www.tiktok.com/@everyinn.home?refer=embed">@everyinn.home</a> Căn phòng “thơ” - No.202 by Every Inn home Một trong những căn phòng được dự là sẽ có độ kín lịch rất cao vì trải nghiệm vỗ về các giác quan tuyệt vời. Nằm đây với chiếc giường ngủ ngon êm ái, thưởng thức bản nhạc yêu thích cùng người ấy trong ánh đèn dịu được hắt nghệ thuật …  <a title="everyinn" target="_blank" href="https://www.tiktok.com/tag/everyinn?refer=embed">#everyinn</a> <a title="homestaysg" target="_blank" href="https://www.tiktok.com/tag/homestaysg?refer=embed">#homestaysg</a> <a title="staycationsaigon" target="_blank" href="https://www.tiktok.com/tag/staycationsaigon?refer=embed">#StaycationSaigon</a> <a title="phanxichlong" target="_blank" href="https://www.tiktok.com/tag/phanxichlong?refer=embed">#PhanXichLong</a> <a title="datenightideas" target="_blank" href="https://www.tiktok.com/tag/datenightideas?refer=embed">#datenightideas</a> <a target="_blank" title="♬ âm thanh gốc  - everyinn.home" href="https://www.tiktok.com/music/âm-thanh-gốc-everyinnhome-7668553928669514504?refer=embed">♬ âm thanh gốc  - everyinn.home</a> </section> </blockquote>`,
   },
 
   {
@@ -188,7 +188,7 @@ export const ROOMS: RoomInfo[] = [
     ],
     images: makeImages(ROOM_IMAGES.r302),
     videoUrl: '', 
-    tiktokEmbed: '',
+    tiktokEmbed: `<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@everyinn.home/video/7669270715660619028" data-video-id="7669270715660619028" style="max-width: 605px;min-width: 325px;" > <section> <a target="_blank" title="@everyinn.home" href="https://www.tiktok.com/@everyinn.home?refer=embed">@everyinn.home</a> “Home giá này mình ở khách sạn cũng thế” - Ơ nhưng mà thế là thế nàoo 🙄🙄🙄 là xinh thế này, trung tâm thế này, là tiện nghi thế này thì ưng quá đi chứ! <a title="homestaysg" target="_blank" href="https://www.tiktok.com/tag/homestaysg?refer=embed">#homestaysg</a> <a title="everyinn" target="_blank" href="https://www.tiktok.com/tag/everyinn?refer=embed">#everyinn</a> <a title="phanxichlong" target="_blank" href="https://www.tiktok.com/tag/phanxichlong?refer=embed">#PhanXichLong</a> <a title="staycation" target="_blank" href="https://www.tiktok.com/tag/staycation?refer=embed">#staycation</a> <a target="_blank" title="♬ Thành phố phía Đông - VƯƠNG BÌNH" href="https://www.tiktok.com/music/Thành-phố-phía-Đông-7432299985347152656?refer=embed">♬ Thành phố phía Đông - VƯƠNG BÌNH</a> </section> </blockquote>`,
   },
 
   // ══════════════════════════════════════════════════════════
@@ -221,7 +221,7 @@ export const ROOMS: RoomInfo[] = [
     ],
     images: makeImages(ROOM_IMAGES.r101),
     videoUrl: '', 
-    tiktokEmbed: '',
+    tiktokEmbed: `<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@everyinn.home/video/7684568587209575701" data-video-id="7684568587209575701" style="max-width: 605px;min-width: 325px;" > <section> <a target="_blank" title="@everyinn.home" href="https://www.tiktok.com/@everyinn.home?refer=embed">@everyinn.home</a> <p>Căn phòng lên tầng lầu 1, tách biệt với nhà xe, yên tĩnh và ấm áp tại Every Inn Phan Xích Long 📍</p> <a target="_blank" title="♬ Thành phố phía Đông - VƯƠNG BÌNH" href="https://www.tiktok.com/music/Thành-phố-phía-Đông-7432299985347152656?refer=embed">♬ Thành phố phía Đông - VƯƠNG BÌNH</a> </section> </blockquote>`,
   },
 
   {
@@ -251,7 +251,7 @@ export const ROOMS: RoomInfo[] = [
     ],
     images: makeImages(ROOM_IMAGES.r201),
     videoUrl: '', 
-    tiktokEmbed: '',
+    tiktokEmbed: `<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@everyinn.home/video/7679381944097885461" data-video-id="7679381944097885461" style="max-width: 605px;min-width: 325px;" > <section> <a target="_blank" title="@everyinn.home" href="https://www.tiktok.com/@everyinn.home?refer=embed">@everyinn.home</a> Staycation duy nhất mình thấy vừa phơi đồ vừa có thể ngắm trọn view Landmark triệu đô. <a title="everyinn" target="_blank" href="https://www.tiktok.com/tag/everyinn?refer=embed">#EveryInn</a> <a title="selfcheckin" target="_blank" href="https://www.tiktok.com/tag/selfcheckin?refer=embed">#SelfCheckin</a> <a title="homestayphunhuan" target="_blank" href="https://www.tiktok.com/tag/homestayphunhuan?refer=embed">#homestayphunhuan</a> <a title="staycationsaigon" target="_blank" href="https://www.tiktok.com/tag/staycationsaigon?refer=embed">#staycationsaigon</a> <a title="nightvibes" target="_blank" href="https://www.tiktok.com/tag/nightvibes?refer=embed">#nightvibes</a> <a target="_blank" title="♬ son original - Pearlfection" href="https://www.tiktok.com/music/son-original-7529274421769472769?refer=embed">♬ son original - Pearlfection</a> </section> </blockquote>`,
   },
 
   {
@@ -281,7 +281,7 @@ export const ROOMS: RoomInfo[] = [
     ],
     images: makeImages(ROOM_IMAGES.r301),
     videoUrl: '', 
-    tiktokEmbed: '',
+    tiktokEmbed: `<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@everyinn.home/video/7673145147688832277" data-video-id="7673145147688832277" style="max-width: 605px;min-width: 325px;" > <section> <a target="_blank" title="@everyinn.home" href="https://www.tiktok.com/@everyinn.home?refer=embed">@everyinn.home</a> Homestay Phan Xích Long gần nhà ga, sân bay. Đi quận 1 chỉ cách 300m <a title="everyinnphanxichlong" target="_blank" href="https://www.tiktok.com/tag/everyinnphanxichlong?refer=embed">#EveryInnPhanXichLong</a> <a title="homestaysg" target="_blank" href="https://www.tiktok.com/tag/homestaysg?refer=embed">#homestaysg</a> <a title="staycation" target="_blank" href="https://www.tiktok.com/tag/staycation?refer=embed">#staycation</a> <a title="homestayphunhuan" target="_blank" href="https://www.tiktok.com/tag/homestayphunhuan?refer=embed">#HomestayPhuNhuan</a> <a target="_blank" title="♬ nhạc nền - Nam Nhân - k." href="https://www.tiktok.com/music/nhạc-nền-Nam-Nhân-7423024568308189968?refer=embed">♬ nhạc nền - Nam Nhân - k.</a> </section> </blockquote>`,
   },
 ];
 
