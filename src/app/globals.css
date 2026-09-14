@@ -485,8 +485,15 @@ ul {
 }
 
 @keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.06); }
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.06);
+  }
 }
 
 .room-info {
@@ -661,7 +668,7 @@ ul {
   border-radius: var(--radius);
   /* Hint scroll on mobile */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.2) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .pc-table {
@@ -798,7 +805,7 @@ ul {
   padding: var(--sp-md);
   border-radius: var(--radius);
   border: 1px solid var(--c-gray-200);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 
 .bw-input {
@@ -1414,6 +1421,7 @@ ul {
     padding-bottom: calc(var(--sp-lg) + env(safe-area-inset-bottom, 16px));
   }
 }
+
 /* ================================================================
    ROOM DETAILS - MEDIA & CAROUSEL (REFACTOR)
    ================================================================ */
@@ -1459,7 +1467,7 @@ ul {
   justify-content: center;
   cursor: pointer;
   z-index: 2;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transition: background-color var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
@@ -1482,8 +1490,10 @@ ul {
     max-height: 70vh;
     border-radius: var(--radius);
   }
+
   .carousel-slide {
-    aspect-ratio: unset; /* override on desktop to prevent huge scroll */
+    aspect-ratio: unset;
+    /* override on desktop to prevent huge scroll */
     height: 70vh;
   }
 }
@@ -1579,7 +1589,8 @@ ul {
 
 .video-container {
   position: relative;
-  padding-bottom: 56.25%; /* 16:9 */
+  padding-bottom: 56.25%;
+  /* 16:9 */
   height: 0;
   overflow: hidden;
   border-radius: var(--radius);

@@ -14,10 +14,10 @@ import { IgIcon } from './Icons';
 const IG_URL = 'https://www.instagram.com/everyinn.home/';
 
 const PRICE_TYPES = [
-  { key: 'combo3h',   label: 'Combo 3H',    note: '' },
-  { key: 'combo6h',   label: 'Combo 6H',    note: '' },
-  { key: 'overnight', label: 'Qua đêm',     note: '21h – 9h' },
-  { key: 'dayroom',   label: 'Phòng ngày',  note: '15h – 12h' },
+  { key: 'combo3h', label: 'Combo 3H', note: '' },
+  { key: 'combo6h', label: 'Combo 6H', note: '' },
+  { key: 'overnight', label: 'Qua đêm', note: '21h – 9h' },
+  { key: 'dayroom', label: 'Phòng ngày', note: '15h – 12h' },
 ];
 
 const VI_DAYS_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -131,7 +131,7 @@ export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps
           <IgIcon />
           <span>Nhắn tin đặt phòng</span>
         </a>
-        <p className="booking-sub">Phản hồi trong 15 phút · @everyinn.home</p>
+        <p className="booking-sub">Instagram & Tiktok · @everyinn.home</p>
       </div>
     </aside>
   );

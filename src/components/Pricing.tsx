@@ -102,7 +102,7 @@ export default function Pricing() {
           <h2 id="pricing-heading">Bảng giá</h2>
           <p>Chọn ngày để xem giá áp dụng — tự động cập nhật ưu đãi theo ngày.</p>
         </div>
-        
+
         <div id="price-calculator" aria-live="polite">
           <div className="pc-top">
             <div className="pc-date-wrap">
@@ -162,7 +162,7 @@ export default function Pricing() {
             <a href={IG_URL} target="_blank" rel="noopener noreferrer" className="btn-primary btn-full btn-cta-lg" id="cta-main">
               <IgIcon /> Nhắn tin đặt phòng ngay
             </a>
-            <p className="pc-cta-note">Phản hồi trong 15 phút · @everyinn.home</p>
+            <p className="pc-cta-note">Instagram & Tiktok · @everyinn.home</p>
           </div>
         </div>
       </div>
