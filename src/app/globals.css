@@ -1060,6 +1060,38 @@ ul {
   border-bottom: 1px solid var(--c-gray-200);
 }
 
+.bw-date-wrap {
+  margin-bottom: var(--sp-sm);
+}
+
+.bw-date-label {
+  font-size: var(--fz-xs);
+  font-weight: 600;
+  color: var(--c-gray-600);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.bw-date-input {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  font-family: var(--font);
+  font-size: var(--fz-sm);
+  font-weight: 500;
+  color: var(--c-black);
+  background: var(--c-white);
+  border: 1px solid var(--c-gray-300);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--duration) var(--ease);
+}
+
+.bw-date-input:focus {
+  border-color: var(--c-accent);
+}
+
 /* Status badge in booking widget */
 .bw-status {
   font-size: var(--fz-xs);

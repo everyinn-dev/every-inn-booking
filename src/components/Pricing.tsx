@@ -19,18 +19,6 @@ function buildStatusBadge(date: Date) {
   const dayName = getDayName(date);
   const dayShort = VI_DAYS_SHORT[date.getDay()];
 
-  if (!promo.enabled) {
-    return <div className="pc-status neutral"><span>Giá tiêu chuẩn</span></div>;
-  }
-
-  if (haven.reason === 'expired') {
-    return (
-      <div className="pc-status neutral">
-        <span>Chương trình ưu đãi đã kết thúc – Áp dụng giá tiêu chuẩn</span>
-      </div>
-    );
-  }
-
   if (haven.isSale) {
     return (
       <div className="pc-status sale">
@@ -42,10 +30,23 @@ function buildStatusBadge(date: Date) {
     );
   }
 
-  const saleDay = promo.days.map((d) => VI_DAYS_SHORT[d]).join(', ');
+  const isWithinPromoDates =
+    promo.enabled &&
+    (!promo.startsOn || date >= new Date(promo.startsOn + 'T00:00:00+07:00')) &&
+    (!promo.endsOn || date <= new Date(promo.endsOn + 'T23:59:59+07:00'));
+
+  if (isWithinPromoDates && !promo.days.includes(date.getDay())) {
+    const saleDays = promo.days.map((d) => VI_DAYS_SHORT[d]).join(', ');
+    return (
+      <div className="pc-status info">
+        <span>ℹ️ <strong>{dayName} ({dayShort})</strong> – Giá tiêu chuẩn (Ưu đãi áp dụng: {saleDays})</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="pc-status info">
-      <span>ℹ️ <strong>{dayName} ({dayShort})</strong> – Giá tiêu chuẩn (Ưu đãi áp dụng: {saleDay})</span>
+    <div className="pc-status neutral">
+      <span>Giá tiêu chuẩn – {dayName} ({dayShort})</span>
     </div>
   );
 }
@@ -86,8 +87,11 @@ export default function Pricing() {
 
   if (!date) return null; // or a skeleton
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const formatYMD = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const todayStr = formatYMD(new Date());
+  const dateStr = date ? formatYMD(date) : todayStr;
 
   const { specialDeal } = PRICE_MANAGER;
 
@@ -111,13 +115,16 @@ export default function Pricing() {
                 className="pc-date-input"
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (!val) return;
+                  if (!val) {
+                    setDate(new Date());
+                    return;
+                  }
                   const [y, m, d] = val.split('-').map(Number);
                   setDate(new Date(y, m - 1, d));
                 }}
               />
             </div>
-            <div id="pc-status" className="pc-status">
+            <div id="pc-status">
               {buildStatusBadge(date)}
             </div>
           </div>

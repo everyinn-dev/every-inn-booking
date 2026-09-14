@@ -28,34 +28,62 @@ interface RoomBookingWidgetProps {
 
 export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps) {
   const [mounted, setMounted] = useState(false);
+  const [date, setDate] = useState<Date>(new Date());
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  const formatYMD = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const today = new Date();
-  const result = getEffectivePrices(priceClass, today);
-  const dayName = getDayName(today);
-  const dayShort = VI_DAYS_SHORT[today.getDay()];
+  const todayStr = formatYMD(today);
+  const dateStr = formatYMD(date);
+
+  const result = getEffectivePrices(priceClass, date);
+  const dayName = getDayName(date);
+  const dayShort = VI_DAYS_SHORT[date.getDay()];
+  const isToday = todayStr === dateStr;
   const { specialDeal } = PRICE_MANAGER;
 
   return (
     <aside className="right-sidebar" aria-label="Đặt phòng">
       <div className="booking-widget">
-        <h3 className="bw-title">Giá phòng hôm nay</h3>
+        <h3 className="bw-title">Kiểm tra giá &amp; Đặt phòng</h3>
+
+        <div className="bw-date-wrap">
+          <label htmlFor="bw-date" className="bw-date-label">📅 Chọn ngày check-in</label>
+          <input
+            type="date"
+            id="bw-date"
+            value={dateStr}
+            min={todayStr}
+            className="bw-date-input"
+            onChange={(e) => {
+              const val = e.target.value;
+              if (!val) {
+                setDate(new Date());
+                return;
+              }
+              const [y, m, d] = val.split('-').map(Number);
+              setDate(new Date(y, m - 1, d));
+            }}
+          />
+        </div>
 
         {mounted ? (
           result.isSale ? (
             <div className="bw-status sale">
-              🎉 {PRICE_MANAGER.promo.label} {PRICE_MANAGER.promo.badgeText} áp dụng hôm nay ({dayName})
+              🎉 {PRICE_MANAGER.promo.label} {PRICE_MANAGER.promo.badgeText} ({isToday ? 'Hôm nay – ' : ''}{dayName})
             </div>
           ) : (
             <div className="bw-status neutral">
-              Giá tiêu chuẩn – {dayName} ({dayShort})
+              Giá tiêu chuẩn – {isToday ? 'Hôm nay (' + dayShort + ')' : `${dayName} (${dayShort})`}
             </div>
           )
         ) : (
-          <div className="bw-status neutral">Giá phòng hôm nay</div>
+          <div className="bw-status neutral">Giá tiêu chuẩn</div>
         )}
 
         <div className="bw-prices">

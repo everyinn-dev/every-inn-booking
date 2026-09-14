@@ -35,6 +35,7 @@ export const PRICE_MANAGER = {
     label: 'Ưu đãi khai trương',
     badgeText: '-20%',
     days: [0, 1, 2, 3, 4],
+    startsOn: null as string | null,
     endsOn: '2026-09-30' as string | null,
     mode: 'percent_off' as 'percent_off' | 'percent_up' | 'manual' | 'none',
     percentValue: 20,
@@ -86,6 +87,13 @@ export function getEffectivePrices(classKey: RoomClassKey, date: Date = new Date
 
   if (!promo.enabled || promo.mode === 'none') {
     return { isSale: false, prices: base, original: null, label: '', badgeText: '', reason: 'base' };
+  }
+
+  if (promo.startsOn) {
+    const start = new Date(promo.startsOn + 'T00:00:00+07:00');
+    if (date < start) {
+      return { isSale: false, prices: base, original: null, label: '', badgeText: '', reason: 'base' };
+    }
   }
 
   if (promo.endsOn) {
