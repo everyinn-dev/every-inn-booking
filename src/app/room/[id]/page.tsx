@@ -7,6 +7,7 @@ import Footer from '../../../components/Footer';
 import RoomCarousel from '../../../components/RoomCarousel';
 import TikTokEmbed from '../../../components/TikTokEmbed';
 import RoomBookingWidget from '../../../components/RoomBookingWidget';
+import RoomCard from '../../../components/RoomCard';
 import { AreaIcon, GuestsIcon, FloorIcon, BedIcon, CheckIcon } from '../../../components/Icons';
 import { ROOMS, getRoomById, getRoomsByClass } from '../../../data/rooms';
 import { getEffectivePrices, getCheapestPrice, PRICE_MANAGER, fmtVND } from '../../../data/pricing';
@@ -226,55 +227,9 @@ export default async function RoomDetailPage({
                 className="room-grid"
                 style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
               >
-                {relatedRooms.map((relRoom) => {
-                  const cheapest = getCheapestPrice(relRoom.priceClass);
-                  const { isSale } = getEffectivePrices(relRoom.priceClass);
-
-                  return (
-                    <Link
-                      key={relRoom.id}
-                      href={`/room/${relRoom.id}`}
-                      className="room-card"
-                      aria-label={`Xem phòng ${relRoom.name}`}
-                    >
-                      <div className="room-img">
-                        <img
-                          src={relRoom.images.thumbnail}
-                          alt={`${relRoom.name} – Every Inn, Nguyễn Công Hoan`}
-                          width="1080"
-                          height="1350"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                        <span className="room-badge">Tầng {relRoom.floor}</span>
-                        {isSale && (
-                          <span className="room-sale-badge">
-                            {PRICE_MANAGER.promo.badgeText}
-                          </span>
-                        )}
-                      </div>
-                      <div className="room-info">
-                        <h4>{relRoom.name}</h4>
-                        <div className="room-meta">
-                          <span>
-                            <AreaIcon /> {relRoom.area}m²
-                          </span>
-                          <span>
-                            <GuestsIcon /> {relRoom.guests} Khách
-                          </span>
-                          <span>
-                            <FloorIcon /> Tầng {relRoom.floor}
-                          </span>
-                        </div>
-                        <p className="room-short-desc">{relRoom.shortDesc}</p>
-                        <div className="room-price">
-                          <span className="price-amount">Từ {fmtVND(cheapest)}</span>
-                          <span className="book-link">Xem phòng →</span>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
+                {relatedRooms.map((relRoom) => (
+                  <RoomCard key={relRoom.id} room={relRoom} />
+                ))}
               </div>
             </div>
           </section>

@@ -446,19 +446,38 @@ ul {
   overflow: hidden;
   background-color: var(--c-gray-200);
   /* CLS placeholder color */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.room-img img {
+.room-img-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform;
+}
+
+.room-img-track img {
+  flex: 0 0 100%;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none;
+  display: block;
   transition: transform 0.6s var(--ease);
+}
+
+.room-card:hover .room-img-track img {
+  transform: scale(1.03);
 }
 
 .room-badge {
   position: absolute;
   top: 12px;
   left: 12px;
+  z-index: 3;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -468,12 +487,14 @@ ul {
   padding: 3px 10px;
   border-radius: 50px;
   letter-spacing: 0.3px;
+  pointer-events: none;
 }
 
 .room-sale-badge {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 3;
   background: #e63946;
   color: var(--c-white);
   font-size: var(--fz-xs);
@@ -482,6 +503,84 @@ ul {
   border-radius: 50px;
   letter-spacing: 0.3px;
   animation: pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Card carousel navigation arrows */
+.card-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: var(--c-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: background-color var(--duration) var(--ease), transform var(--duration) var(--ease), opacity var(--duration) var(--ease);
+  opacity: 0.85;
+}
+
+.card-arrow:hover {
+  background: #ffffff;
+  transform: translateY(-50%) scale(1.1);
+  opacity: 1;
+}
+
+.card-arrow:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.card-arrow.prev {
+  left: 8px;
+}
+
+.card-arrow.next {
+  right: 8px;
+}
+
+/* Card carousel dots */
+.card-dots {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  padding: 4px 8px;
+  border-radius: 50px;
+  max-width: 80%;
+  overflow: hidden;
+}
+
+.card-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transition: all 0.25s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.card-dot.active {
+  width: 7px;
+  height: 7px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes pulse {
