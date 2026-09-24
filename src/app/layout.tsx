@@ -18,6 +18,14 @@ export const metadata: Metadata = {
 	title: "Every Inn | Hotels, Homes and Everything In – Nguyễn Công Hoan, P.Cầu Kiệu (Quận Phú Nhuận cũ), TP.HCM",
 	description: "Every Inn – Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu. Gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày từ 256.000đ. Nhắn tin Instagram đặt ngay.",
 	keywords: "every inn, every inn phú nhuận, homestay Phú Nhuận, khách sạn nguyễn công hoan, thuê phòng nguyễn công hoan, gần sân bay tân sơn nhất, căn hộ ngắn hạn sài gòn, tự nhận phòng 24/7, combo 3h 6h qua đêm phòng ngày, haven signature",
+	icons: {
+		icon: [
+			{ url: "/favicon.ico" },
+			{ url: "/icon.png", type: "image/png" },
+		],
+		shortcut: "/favicon.ico",
+		apple: "/apple-touch-icon.png",
+	},
 	robots: {
 		index: true,
 		follow: true,
