@@ -201,3 +201,8 @@ dist
 ### OpenNext ###
 .open-next/
 next-env.d.ts
+
+### MCP Configurations (contains secrets) ###
+.mcp.json
+.agents/mcp_config.json
+
