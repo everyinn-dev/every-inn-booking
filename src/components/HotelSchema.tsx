@@ -15,14 +15,14 @@ export default function HotelSchema() {
     description:
       'Every Inn – Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu (Quận Phú Nhuận cũ), TP.HCM. Gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày từ 256.000đ.',
     url: 'https://everyinn.vn/',
-    logo: 'https://res.cloudinary.com/gsldcdgb/image/upload/v1788681602/My%20Brand/LOGO_1_wbjveg.png',
+    logo: 'https://res.cloudinary.com/everyinn/image/upload/v1788681602/My%20Brand/LOGO_1_wbjveg.png',
     image: [
-      'https://res.cloudinary.com/gsldcdgb/image/upload/c_fill,w_1200,h_630,q_80,f_auto/v1785586726/20_sc3x5z.jpg',
-      'https://res.cloudinary.com/gsldcdgb/image/upload/c_fill,w_1920,h_1080,q_80,f_auto/v1785586463/36_iwxmar.jpg',
-      'https://res.cloudinary.com/gsldcdgb/image/upload/v1785587031/102_wxxqae.jpg',
-      'https://res.cloudinary.com/gsldcdgb/image/upload/v1785587029/101_t0zzks.jpg',
-      'https://res.cloudinary.com/gsldcdgb/image/upload/v1785587029/201_mwm5gt.jpg',
-      'https://res.cloudinary.com/gsldcdgb/image/upload/v1785586468/new_tyggz1.jpg'
+      'https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1200,h_630,q_80,f_auto/v1785586726/20_sc3x5z.jpg',
+      'https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1920,h_1080,q_80,f_auto/v1785586463/36_iwxmar.jpg',
+      'https://res.cloudinary.com/everyinn/image/upload/v1785587031/102_wxxqae.jpg',
+      'https://res.cloudinary.com/everyinn/image/upload/v1785587029/101_t0zzks.jpg',
+      'https://res.cloudinary.com/everyinn/image/upload/v1785587029/201_mwm5gt.jpg',
+      'https://res.cloudinary.com/everyinn/image/upload/v1785586468/new_tyggz1.jpg'
     ],
     telephone: '+84906314109',
     email: 'hi.everyinn@gmail.com',

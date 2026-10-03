@@ -6,7 +6,7 @@ export default function Hero() {
   return (
     <section className="hero" aria-label="Every Inn – Hotels, Homes and Everything In">
       <img
-        src="https://res.cloudinary.com/gsldcdgb/image/upload/c_fill,w_1920,h_1080,q_80,f_auto/v1785586463/36_iwxmar.jpg"
+        src="https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1920,h_1080,q_80,f_auto/v1785586463/36_iwxmar.jpg"
         alt="Every Inn – Phòng Signature 102, Nguyễn Công Hoan"
         width="1920"
         height="1080"

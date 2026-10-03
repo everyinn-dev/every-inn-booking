@@ -44,7 +44,7 @@ export const metadata: Metadata = {
 		url: "https://everyinn.vn/",
 		images: [
 			{
-				url: "https://res.cloudinary.com/gsldcdgb/image/upload/c_fill,w_1200,h_630,q_80,f_auto/v1785586726/20_sc3x5z.jpg",
+				url: "https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1200,h_630,q_80,f_auto/v1785586726/20_sc3x5z.jpg",
 				width: 1200,
 				height: 630,
 				alt: "Every Inn – Phòng Signature 102, Nguyễn Công Hoan",
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
 		card: "summary_large_image",
 		title: "Every Inn | Hotels, Homes and Everything In – Phú Nhuận, TP.HCM",
 		description: "Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan. Gần sân bay Tân Sơn Nhất. Giá từ 256.000đ.",
-		images: ["https://res.cloudinary.com/gsldcdgb/image/upload/c_fill,w_1200,h_630,q_80,f_auto/v1785586726/20_sc3x5z.jpg"],
+		images: ["https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1200,h_630,q_80,f_auto/v1785586726/20_sc3x5z.jpg"],
 	},
 	other: {
 		"geo.region": "VN-SG",

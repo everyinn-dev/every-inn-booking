@@ -10,7 +10,8 @@
 import { RoomClassKey } from './pricing';
 
 // ── Cloudinary configuration ─────────────────────────────────
-const CDN_BASE = 'https://res.cloudinary.com/gsldcdgb/image/upload';
+export const CLOUDINARY_CLOUD_NAME = 'everyinn';
+const CDN_BASE = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
 export const cdn = (path: string, tx: string = '') => {
   if (!path) return '';
@@ -19,7 +20,7 @@ export const cdn = (path: string, tx: string = '') => {
   return tx ? `${CDN_BASE}/${tx}/${relPath}` : `${CDN_BASE}/${relPath}`;
 };
 
-export const LOGO_URL = 'https://res.cloudinary.com/gsldcdgb/image/upload/v1788681602/My%20Brand/LOGO_1_wbjveg.png';
+export const LOGO_URL = `${CDN_BASE}/v1788681602/My%20Brand/LOGO_1_wbjveg.png`;
 
 // ── Image library ─────────────────────────────────────────────
 export const ROOM_IMAGES = {

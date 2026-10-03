@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { LOGO_URL } from '@/data/rooms';
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -39,7 +40,7 @@ export default function Header() {
       <div className="container header-inner">
         <Link href="/" className="logo" aria-label="Every Inn – Trang chủ" onClick={closeNav}>
           <img
-            src="https://res.cloudinary.com/gsldcdgb/image/upload/v1788681602/My%20Brand/LOGO_1_wbjveg.png"
+            src={LOGO_URL}
             alt="Every Inn Logo"
             className="logo-img"
             width="40"

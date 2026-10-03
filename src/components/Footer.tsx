@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { LOGO_URL } from '@/data/rooms';
 
 export default function Footer() {
   return (
@@ -7,7 +8,7 @@ export default function Footer() {
       <div className="container footer-inner">
         <Link href="/" className="logo footer-logo" aria-label="Every Inn – Trang chủ">
           <img
-            src="https://res.cloudinary.com/gsldcdgb/image/upload/v1788681602/My%20Brand/LOGO_1_wbjveg.png"
+            src={LOGO_URL}
             alt="Every Inn Logo"
             className="logo-img footer-logo-img"
             width="52"
