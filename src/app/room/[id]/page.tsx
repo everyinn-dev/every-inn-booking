@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import RoomCarousel from '../../../components/RoomCarousel';
-import TikTokEmbed from '../../../components/TikTokEmbed';
+import RoomReelPlayer from '../../../components/RoomReelPlayer';
 import RoomBookingWidget from '../../../components/RoomBookingWidget';
 import RoomCard from '../../../components/RoomCard';
 import { AreaIcon, GuestsIcon, FloorIcon, BedIcon, CheckIcon } from '../../../components/Icons';
@@ -188,30 +188,8 @@ export default async function RoomDetailPage({
                 </div>
               </div>
 
-              {/* Media section: TikTok & Video */}
-              {(room.videoUrl || room.tiktokEmbed) && (
-                <section className="media-section">
-                  <h2>Video &amp; Không gian thực tế</h2>
-                  <div
-                    className="media-grid"
-                    style={{
-                      gridTemplateColumns: room.videoUrl && room.tiktokEmbed ? undefined : '1fr',
-                    }}
-                  >
-                    {room.videoUrl && (
-                      <div className="video-container">
-                        <iframe
-                          src={room.videoUrl}
-                          title={`Video không gian ${room.name}`}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      </div>
-                    )}
-                    {room.tiktokEmbed && <TikTokEmbed embedHtml={room.tiktokEmbed} />}
-                  </div>
-                </section>
-              )}
+              {/* Room Video Reel Showcase */}
+              <RoomReelPlayer room={room} />
             </div>
 
             <RoomBookingWidget priceClass={room.priceClass} />
