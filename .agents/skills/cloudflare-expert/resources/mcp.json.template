@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cloudflare-docs": {
+      "type": "streamable-http",
+      "url": "https://docs.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare": {
+      "type": "streamable-http",
+      "url": "https://mcp.cloudflare.com/mcp"
+    }
+  }
+}

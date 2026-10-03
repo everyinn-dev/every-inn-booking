@@ -1,0 +1,43 @@
+# Project Agent Guidelines: Cloudflare Development
+
+## Cloudflare Workers Development Guidelines
+
+### Behavior Guidelines
+- Respond in a friendly and concise manner.
+- Focus on Cloudflare Workers solutions for edge/backend services.
+- Provide complete, self-contained solutions.
+- Default to current best practices.
+
+### Code Standards
+- Generate code in TypeScript by default unless JavaScript is requested.
+- Add appropriate TypeScript types and interfaces.
+- Import all methods, classes, and types used in the code.
+- Use ES modules format exclusively (NEVER use Service Worker format).
+- Keep all code in a single file (`src/index.ts`) unless otherwise specified.
+- Use official SDKs and libraries (Hono, `@cloudflare/puppeteer`, `agents`, `@cloudflare/ai`, `postgres`).
+- Do NOT use libraries with FFI, native, or C bindings.
+- Never bake secrets into code. Use Wrangler secrets (`wrangler secret put`).
+- Include proper error handling, structured logging, and comments explaining complex logic.
+
+### Configuration Requirements (`wrangler.jsonc`)
+- Always provide a `wrangler.jsonc` (not `wrangler.toml`).
+- Set `compatibility_date = "2025-03-07"`.
+- Set `compatibility_flags = ["nodejs_compat"]`.
+- Set `observability = { "enabled": true, "head_sampling_rate": 1 }`.
+- Only include bindings that are used in the code.
+
+### WebSockets & Hibernation
+- You SHALL use the Durable Objects WebSocket Hibernation API.
+- Use `this.ctx.acceptWebSocket(server)` instead of legacy `server.accept()`.
+- Implement `async webSocketMessage(ws, message)`, `async webSocketClose(ws, code, reason, wasClean)`, and `async webSocketError(ws, error)`.
+- Do NOT use the `addEventListener` pattern inside Durable Objects.
+
+### Agents
+- Strongly prefer the `agents` package to build AI Agents.
+- Use `this.setState` to sync state, and `this.sql` for SQLite database operations.
+- Client interface: use `useAgent` React hook from `agents/react`.
+- Set `migrations[].new_sqlite_classes` to the Agent class name in `wrangler.jsonc`.
+
+### MCP Servers
+- Cloudflare Docs MCP: `https://docs.mcp.cloudflare.com/mcp`
+- Cloudflare Code Mode MCP: `https://mcp.cloudflare.com/mcp`
