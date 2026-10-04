@@ -297,7 +297,11 @@ export default function RoomReelPlayer({ room }: RoomReelPlayerProps) {
 
           <div className="reel-hl-footer">
             <span className="reel-hl-pill">Phòng đầy đủ tiện nghi</span>
-            <span className="reel-hl-pill">Smart TV netflix</span>
+            <span className="reel-hl-pill">
+              {room.amenities.some((a) => a.label.toLowerCase().includes('máy chiếu'))
+                ? 'Máy chiếu 80" Full HD'
+                : 'Smart TV Netflix'}
+            </span>
             <span className="reel-hl-pill">Ga đệm sạch 100%</span>
           </div>
         </div>

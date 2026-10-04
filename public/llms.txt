@@ -24,12 +24,17 @@
 ## Room Classes
 1. **Haven Class** (Rooms 101, 201, 301):
    - 20m², Queen Bed (1m6 x 2m), 2 guests.
-   - Private bathroom, high-speed Wi-Fi, Smart TV with Netflix & YouTube, mini fridge, air conditioning.
+   - Private bathroom, high-speed Wi-Fi, inverter air conditioning, hair dryer, kettle.
+   - **Room 201**: Features an 80-inch Full HD cinema projector.
+   - **Rooms 101 & 301**: Feature Smart TVs with Netflix & YouTube.
    - Quiet rear position, optimal for sound sleep and remote work.
 2. **Signature Class** (Rooms 102, 202, 302):
-   - 28-30m², Queen Bed (1m6 x 2m), 2 guests.
+   - 24-30m², Queen Bed (1m6 x 2m), 2 guests.
    - Dual-aspect windows with abundant natural sunlight, premium mattress.
-   - Spacious layout ideal for extended stays, couples, and aesthetic content creators.
+   - Dedicated microwave oven (lò vi sóng), mini fridge, inverter AC, high-speed Wi-Fi.
+   - **Rooms 102 & 302**: Feature 80-inch Full HD cinema projectors.
+   - **Room 202**: Features a Smart TV with Netflix & YouTube.
+   - Spacious layout ideal for extended stays, staycations, couples, and aesthetic content creators.
 
 ## Pricing Models (VND)
 - **Combo 3 Hours**: Flexible short stay from 256,000 VND.
