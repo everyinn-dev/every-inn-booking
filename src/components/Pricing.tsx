@@ -78,20 +78,13 @@ function PriceRow({ classKey, className, date }: { classKey: 'haven' | 'signatur
 }
 
 export default function Pricing() {
-  const [date, setDate] = useState<Date | null>(null);
-
-  useEffect(() => {
-    // Set initial date only on the client to avoid hydration mismatch
-    setDate(new Date());
-  }, []);
-
-  if (!date) return null; // or a skeleton
+  const [date, setDate] = useState<Date>(() => new Date());
 
   const formatYMD = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   const todayStr = formatYMD(new Date());
-  const dateStr = date ? formatYMD(date) : todayStr;
+  const dateStr = formatYMD(date);
 
   const { specialDeal } = PRICE_MANAGER;
 
@@ -113,6 +106,7 @@ export default function Pricing() {
                 value={dateStr}
                 min={todayStr}
                 className="pc-date-input"
+                suppressHydrationWarning
                 onChange={(e) => {
                   const val = e.target.value;
                   if (!val) {
@@ -124,7 +118,7 @@ export default function Pricing() {
                 }}
               />
             </div>
-            <div id="pc-status">
+            <div id="pc-status" suppressHydrationWarning>
               {buildStatusBadge(date)}
             </div>
           </div>

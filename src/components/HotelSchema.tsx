@@ -57,14 +57,13 @@ export default function HotelSchema() {
     },
     geo: {
       '@type': 'GeoCoordinates',
-      latitude: 10.7998871,
-      longitude: 106.6889157,
+      latitude: 10.7998889,
+      longitude: 106.6863418,
     },
-    hasMap: 'https://maps.google.com/?cid=13693822161726077230',
+    hasMap: 'https://maps.app.goo.gl/pVwBsHvNMaGWDGZz8',
     sameAs: [
       'https://www.instagram.com/everyinn.home/',
-      'https://maps.google.com/?cid=13693822161726077230',
-      'https://www.google.com/maps/place/Every+Inn+-+Apartments+%26+Hotel/@10.7998871,106.6889157,17z/data=!3m1!4b1!4m6!3m5!1s0x317529888f02f98b:0xbe09bebbc5faf92e!8m2!3d10.7998871!4d106.6889157',
+      'https://maps.app.goo.gl/pVwBsHvNMaGWDGZz8',
     ],
     amenityFeature: [
       {
@@ -230,10 +229,47 @@ export default function HotelSchema() {
     ],
   };
 
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      {
+        '@type': 'Question',
+        name: 'Every Inn có hỗ trợ nhận phòng tự động 24/7 (Self Check-in) không?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Có. Every Inn áp dụng quy trình tự nhận phòng 24/7 hoàn toàn bằng mã số khóa thông minh (smart lock), khách có thể chủ động nhận phòng bất cứ lúc nào mà không cần qua quầy lễ tân, rất thuận tiện cho các chuyến bay hạ cánh đêm muộn tại Tân Sơn Nhất.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Every Inn cách sân bay quốc tế Tân Sơn Nhất (SGN) bao xa?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Every Inn tọa lạc tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu (Phú Nhuận), cách sân bay Tân Sơn Nhất khoảng 5.5 km (khoảng 15 phút đi Grab/taxi) và cách trung tâm Quận 1 khoảng 7-10 phút.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Các gói giá thuê phòng tại Every Inn như thế nào?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Every Inn cung cấp đa dạng gói linh hoạt: Combo 3 Giờ (từ 256.000đ), Combo 6 Giờ (từ 480.000đ), Gói Qua Đêm (21:00 - 09:00, từ 392.000đ) và Phòng Ngày (15:00 - 12:00 hôm sau, từ 472.000đ).',
+        },
+      },
+    ],
+  };
+
   return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
+    </>
   );
 }

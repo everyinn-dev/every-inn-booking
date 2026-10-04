@@ -6,17 +6,22 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "saigonliving",
 	"main": ".open-next/worker.js",
-	"compatibility_date": "2025-10-08",
+	"compatibility_date": "2025-03-07",
 	"compatibility_flags": [
 		"nodejs_compat",
-		"global_fetch_strictly_public"
+		"global_fetch_strictly_public",
+		"text_decoder_cjk_decoder",
+		"enable_global_performance_classes",
+		"encoder_stream_spec_compliant_backpressure",
+		"writable_stream_spec_compliant_writer"
 	],
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".open-next/assets"
 	},
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"head_sampling_rate": 1
 	},
-	"upload_source_maps": true
+	"upload_source_maps": false
 }

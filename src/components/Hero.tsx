@@ -7,6 +7,12 @@ export default function Hero() {
     <section className="hero" aria-label="Every Inn – Hotels, Homes and Everything In">
       <img
         src="https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1920,h_1080,q_80,f_auto/v1785586463/36_iwxmar.jpg"
+        srcSet="
+          https://res.cloudinary.com/everyinn/image/upload/c_fill,w_720,h_1280,q_80,f_auto/v1785586463/36_iwxmar.jpg 720w,
+          https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1200,h_800,q_80,f_auto/v1785586463/36_iwxmar.jpg 1200w,
+          https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1920,h_1080,q_80,f_auto/v1785586463/36_iwxmar.jpg 1920w
+        "
+        sizes="(max-width: 640px) 720px, (max-width: 1024px) 1200px, 100vw"
         alt="Every Inn – Phòng Signature 102, Nguyễn Công Hoan"
         width="1920"
         height="1080"

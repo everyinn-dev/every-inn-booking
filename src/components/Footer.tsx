@@ -30,7 +30,7 @@ export default function Footer() {
             @everyinn.home
           </a>
           <a
-            href="https://maps.google.com/?cid=13693822161726077230"
+            href="https://maps.app.goo.gl/pVwBsHvNMaGWDGZz8"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Every Inn trên Google Maps"

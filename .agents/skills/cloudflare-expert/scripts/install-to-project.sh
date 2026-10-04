@@ -39,9 +39,16 @@ fi
 cp "$SKILL_ROOT/references/rules.md" "$TARGET_DIR/.agents/rules/cloudflare-workers.md"
 echo "✅ Created .agents/rules/cloudflare-workers.md"
 
-# 5. Setup MCP configurations
-cp "$SKILL_ROOT/resources/mcp.json.template" "$TARGET_DIR/.mcp.json"
-cp "$SKILL_ROOT/resources/mcp.json.template" "$TARGET_DIR/.agents/mcp_config.json"
-echo "✅ Created .mcp.json and .agents/mcp_config.json"
+# 5. Setup safe MCP template
+cp "$SKILL_ROOT/resources/mcp.json.template" "$TARGET_DIR/.mcp.json.example"
+echo "✅ Created .mcp.json.example"
+
+# 6. Ensure .gitignore excludes real MCP credential files
+if [ -f "$TARGET_DIR/.gitignore" ]; then
+  if ! grep -q "\.mcp\.json" "$TARGET_DIR/.gitignore"; then
+    echo -e "\n### MCP Configurations (contains secrets) ###\n.mcp.json\n.agents/mcp_config.json" >> "$TARGET_DIR/.gitignore"
+    echo "🛡️  Added .mcp.json and .agents/mcp_config.json to .gitignore"
+  fi
+fi
 
 echo "🎉 Done! Cloudflare Expert is now fully integrated into '$TARGET_DIR'."

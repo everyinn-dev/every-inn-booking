@@ -85,9 +85,13 @@ export default async function RoomDetailPage({
   const roomSchema = {
     '@context': 'https://schema.org',
     '@type': 'HotelRoom',
+    '@id': `https://everyinn.vn/room/${room.id}#room`,
     name: room.name,
     description: `${room.shortDesc} Tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu (Quận Phú Nhuận cũ), TP.HCM.`,
     image: room.images.hero,
+    containedInPlace: {
+      '@id': 'https://everyinn.vn/#hotel',
+    },
     occupancy: {
       '@type': 'QuantitativeValue',
       maxValue: room.guests,
@@ -115,11 +119,40 @@ export default async function RoomDetailPage({
     },
   };
 
+  const breadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Trang chủ',
+        item: 'https://everyinn.vn',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: `Hạng phòng ${room.class}`,
+        item: `https://everyinn.vn/#class-${room.class.toLowerCase()}`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: room.name,
+        item: `https://everyinn.vn/room/${room.id}`,
+      },
+    ],
+  };
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(roomSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
 
       <Header />

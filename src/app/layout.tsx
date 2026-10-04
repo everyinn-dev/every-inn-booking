@@ -62,8 +62,8 @@ export const metadata: Metadata = {
 	other: {
 		"geo.region": "VN-SG",
 		"geo.placename": "Ho Chi Minh City",
-		"geo.position": "10.799887;106.688916",
-		ICBM: "10.799887, 106.688916",
+		"geo.position": "10.7998889;106.6863418",
+		ICBM: "10.7998889, 106.6863418",
 	},
 };
 
@@ -75,6 +75,14 @@ export default function RootLayout({
 	return (
 		<html lang="vi">
 			<head>
+				<link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
+				<link rel="dns-prefetch" href="https://res.cloudinary.com" />
+				<link
+					rel="preload"
+					as="image"
+					href="https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1200,h_800,q_80,f_auto/v1785586463/36_iwxmar.jpg"
+					fetchPriority="high"
+				/>
 				<HotelSchema />
 			</head>
 			<body
