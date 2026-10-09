@@ -32,13 +32,21 @@ export const EXTRA_HOUR_FEE = 60_000; // per hour, max 2 hours
 export const PRICE_MANAGER = {
   promo: {
     enabled: true,
-    label: 'Ưu đãi khai trương',
-    badgeText: '-20%',
-    days: [0, 1, 2, 3, 4],
-    startsOn: null as string | null,
-    endsOn: '2026-09-30' as string | null,
+    label: 'Ưu đãi tháng 10',
+    badgeText: '-10% ~ -15%',
+    days: [0, 1, 2, 3, 4, 5], // Chủ Nhật đến Thứ Sáu (Thứ 7 không áp dụng)
+    startsOn: '2026-10-06' as string | null,
+    endsOn: '2026-10-16' as string | null,
     mode: 'percent_off' as 'percent_off' | 'percent_up' | 'manual' | 'none',
-    percentValue: 20,
+    percentValue: 10,
+    percentByClass: {
+      haven: 10,     // Giảm 10% hạng Haven
+      signature: 15, // Giảm 15% hạng Signature
+    } as Record<RoomClassKey, number>,
+    badgeTextByClass: {
+      haven: '-10%',
+      signature: '-15%',
+    } as Record<RoomClassKey, string>,
     manualPrices: {
       haven: {
         combo3h:   null as number | null,
@@ -107,15 +115,16 @@ export function getEffectivePrices(classKey: RoomClassKey, date: Date = new Date
     return { isSale: false, prices: base, original: null, label: '', badgeText: '', reason: 'day_excluded' };
   }
 
+  const percent = promo.percentByClass?.[classKey] ?? promo.percentValue ?? 0;
   let promoPrice: Record<string, number> = {};
 
   if (promo.mode === 'percent_off') {
-    const factor = 1 - promo.percentValue / 100;
+    const factor = 1 - percent / 100;
     promoPrice = Object.fromEntries(
       Object.entries(base).map(([k, v]) => [k, Math.round(v * factor)])
     );
   } else if (promo.mode === 'percent_up') {
-    const factor = 1 + promo.percentValue / 100;
+    const factor = 1 + percent / 100;
     promoPrice = Object.fromEntries(
       Object.entries(base).map(([k, v]) => [k, Math.round(v * factor)])
     );
@@ -127,13 +136,14 @@ export function getEffectivePrices(classKey: RoomClassKey, date: Date = new Date
   }
 
   const hasChange = Object.entries(promoPrice).some(([k, v]) => v !== base[k]);
+  const badgeText = promo.badgeTextByClass?.[classKey] ?? (percent > 0 ? `-${percent}%` : promo.badgeText);
 
   return {
     isSale: hasChange,
     prices: promoPrice,
     original: hasChange ? base : null,
     label: promo.label,
-    badgeText: promo.badgeText,
+    badgeText: hasChange ? badgeText : '',
     reason: 'promo',
   };
 }

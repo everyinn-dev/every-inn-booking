@@ -701,34 +701,236 @@ ul {
   margin-bottom: var(--sp-md);
 }
 
-.pc-date-label {
-  font-size: var(--fz-sm);
-  font-weight: 600;
-  color: var(--c-gray-400);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  display: block;
-  margin-bottom: 6px;
+@media (min-width: 768px) {
+  .pc-top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-md);
+  }
+
+  .pc-top .ab-picker-root {
+    flex: 0 1 380px;
+  }
+
+  .pc-top #pc-status {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+  }
 }
 
-.pc-date-input {
-  font-family: var(--font);
-  font-size: var(--fz-base);
-  font-weight: 500;
-  color: var(--c-black);
-  background: var(--c-white);
-  border: 2px solid transparent;
-  border-radius: var(--radius-sm);
+/* ── Airbnb-style Checkin Date Picker ─────────────────────── */
+.ab-picker-root {
+  width: 100%;
+  user-select: none;
+}
+
+.ab-picker-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 14px;
-  outline: none;
+  border-radius: var(--radius);
   cursor: pointer;
-  transition: border-color var(--duration) var(--ease);
-  min-height: 48px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
 }
 
-.pc-date-input:focus {
-  border-color: var(--c-accent);
+/* Light Theme (Booking Widget) */
+.ab-picker-root.theme-light .ab-picker-card {
+  background: var(--c-white);
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
+
+.ab-picker-root.theme-light .ab-picker-card:hover {
+  border-color: #222222;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+}
+
+.ab-picker-root.theme-light .ab-picker-card:focus-visible {
+  border-color: #222222;
+  box-shadow: 0 0 0 2px rgba(34, 34, 34, 0.15);
+}
+
+.ab-picker-root.theme-light .ab-picker-micro-label {
+  color: #717171;
+}
+
+.ab-picker-root.theme-light .ab-picker-value {
+  color: #222222;
+}
+
+.ab-picker-root.theme-light .ab-picker-icon-box {
+  background: #f7f7f7;
+  color: #222222;
+}
+
+.ab-picker-root.theme-light .ab-picker-pill {
+  background: rgba(196, 161, 115, 0.16);
+  color: #8f652b;
+}
+
+.ab-picker-root.theme-light .ab-shortcut-btn {
+  background: #f2f2f2;
+  color: #555555;
+  border: 1px solid transparent;
+}
+
+.ab-picker-root.theme-light .ab-shortcut-btn:hover {
+  background: #e6e6e6;
+  color: #111111;
+}
+
+.ab-picker-root.theme-light .ab-shortcut-btn.is-active {
+  background: #222222;
+  color: #ffffff;
+  border-color: #222222;
+}
+
+/* Dark Theme (Pricing Section) */
+.ab-picker-root.theme-dark .ab-picker-card {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ab-picker-root.theme-dark .ab-picker-card:hover {
+  border-color: var(--c-accent);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.ab-picker-root.theme-dark .ab-picker-card:focus-visible {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 2px rgba(196, 161, 115, 0.35);
+}
+
+.ab-picker-root.theme-dark .ab-picker-micro-label {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.ab-picker-root.theme-dark .ab-picker-value {
+  color: var(--c-white);
+}
+
+.ab-picker-root.theme-dark .ab-picker-icon-box {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--c-accent);
+}
+
+.ab-picker-root.theme-dark .ab-picker-pill {
+  background: rgba(196, 161, 115, 0.22);
+  color: var(--c-accent);
+}
+
+.ab-picker-root.theme-dark .ab-shortcut-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.ab-picker-root.theme-dark .ab-shortcut-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--c-white);
+}
+
+.ab-picker-root.theme-dark .ab-shortcut-btn.is-active {
+  background: var(--c-accent);
+  color: #111111;
+  border-color: var(--c-accent);
+  font-weight: 600;
+}
+
+/* Inner elements */
+.ab-picker-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ab-picker-micro-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.ab-picker-value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ab-picker-value {
+  font-family: var(--font);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.ab-picker-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 50px;
+  line-height: 1.2;
+}
+
+.ab-picker-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.ab-picker-card:hover .ab-picker-icon-box {
+  transform: scale(1.05);
+}
+
+.ab-picker-native-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.ab-picker-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.ab-shortcut-btn {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
 
 /* Status badge */
 .pc-status {
@@ -1168,34 +1370,6 @@ ul {
 
 .bw-date-wrap {
   margin-bottom: var(--sp-sm);
-}
-
-.bw-date-label {
-  font-size: var(--fz-xs);
-  font-weight: 600;
-  color: var(--c-gray-600);
-  display: block;
-  margin-bottom: 4px;
-}
-
-.bw-date-input {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  font-family: var(--font);
-  font-size: var(--fz-sm);
-  font-weight: 500;
-  color: var(--c-black);
-  background: var(--c-white);
-  border: 1px solid var(--c-gray-300);
-  border-radius: var(--radius-sm);
-  outline: none;
-  cursor: pointer;
-  transition: border-color var(--duration) var(--ease);
-}
-
-.bw-date-input:focus {
-  border-color: var(--c-accent);
 }
 
 /* Status badge in booking widget */

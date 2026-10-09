@@ -1,7 +1,8 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { PRICE_MANAGER, EXTRA_HOUR_FEE, getEffectivePrices, getDayName, fmtVND } from '../data/pricing';
 import { IgIcon } from './Icons';
+import CheckinDatePicker from './CheckinDatePicker';
 
 const IG_URL = 'https://www.instagram.com/everyinn.home/';
 const VI_DAYS_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -15,16 +16,22 @@ const PRICE_TYPES = [
 
 function buildStatusBadge(date: Date) {
   const haven = getEffectivePrices('haven', date);
+  const signature = getEffectivePrices('signature', date);
   const { promo } = PRICE_MANAGER;
   const dayName = getDayName(date);
   const dayShort = VI_DAYS_SHORT[date.getDay()];
 
-  if (haven.isSale) {
+  if (haven.isSale || signature.isSale) {
+    const badgeSummary =
+      haven.badgeText && signature.badgeText && haven.badgeText !== signature.badgeText
+        ? `Haven ${haven.badgeText}, Signature ${signature.badgeText}`
+        : (haven.badgeText || signature.badgeText);
+
     return (
       <div className="pc-status sale">
         <span className="pc-fire">🎉</span>
         <span>
-          <strong>{dayName} ({dayShort})</strong> – Đang áp dụng <strong>{promo.label} {promo.badgeText}</strong>
+          <strong>{dayName} ({dayShort})</strong> – Đang áp dụng <strong>{promo.label} ({badgeSummary})</strong>
         </span>
       </div>
     );
@@ -36,10 +43,9 @@ function buildStatusBadge(date: Date) {
     (!promo.endsOn || date <= new Date(promo.endsOn + 'T23:59:59+07:00'));
 
   if (isWithinPromoDates && !promo.days.includes(date.getDay())) {
-    const saleDays = promo.days.map((d) => VI_DAYS_SHORT[d]).join(', ');
     return (
       <div className="pc-status info">
-        <span>ℹ️ <strong>{dayName} ({dayShort})</strong> – Giá tiêu chuẩn (Ưu đãi áp dụng: {saleDays})</span>
+        <span>ℹ️ <strong>{dayName} ({dayShort})</strong> – Giá tiêu chuẩn (Thứ 7 không áp dụng giảm giá)</span>
       </div>
     );
   }
@@ -69,7 +75,7 @@ function PriceRow({ classKey, className, date }: { classKey: 'haven' | 'signatur
           <td key={key} className={`pc-cell ${result.isSale ? 'is-sale' : ''}`}>
             {diff && <span className="pc-orig">{fmtVND(orig)}</span>}
             <span className="pc-price">{fmtVND(p)}</span>
-            {diff && <span className="pc-badge">{PRICE_MANAGER.promo.badgeText}</span>}
+            {diff && <span className="pc-badge">{result.badgeText}</span>}
           </td>
         );
       })}
@@ -79,13 +85,6 @@ function PriceRow({ classKey, className, date }: { classKey: 'haven' | 'signatur
 
 export default function Pricing() {
   const [date, setDate] = useState<Date>(() => new Date());
-
-  const formatYMD = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-  const todayStr = formatYMD(new Date());
-  const dateStr = formatYMD(date);
-
   const { specialDeal } = PRICE_MANAGER;
 
   return (
@@ -98,26 +97,14 @@ export default function Pricing() {
 
         <div id="price-calculator" aria-live="polite">
           <div className="pc-top">
-            <div className="pc-date-wrap">
-              <label htmlFor="pc-date" className="pc-date-label">📅 Chọn ngày check-in</label>
-              <input
-                type="date"
-                id="pc-date"
-                value={dateStr}
-                min={todayStr}
-                className="pc-date-input"
-                suppressHydrationWarning
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (!val) {
-                    setDate(new Date());
-                    return;
-                  }
-                  const [y, m, d] = val.split('-').map(Number);
-                  setDate(new Date(y, m - 1, d));
-                }}
-              />
-            </div>
+            <CheckinDatePicker
+              id="pc-date"
+              selectedDate={date}
+              onChange={setDate}
+              theme="dark"
+              label="Ngày nhận phòng"
+              showShortcuts={true}
+            />
             <div id="pc-status" suppressHydrationWarning>
               {buildStatusBadge(date)}
             </div>

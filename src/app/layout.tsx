@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 		canonical: "/",
 	},
 	title: "Every Inn | Hotels, Homes and Everything In – Nguyễn Công Hoan, P.Cầu Kiệu (Quận Phú Nhuận cũ), TP.HCM",
-	description: "Every Inn – Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu. Gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày từ 256.000đ. Nhắn tin Instagram đặt ngay.",
+	description: "Every Inn – Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu. Gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày từ 288.000đ. Nhắn tin Instagram đặt ngay.",
 	keywords: "every inn, every inn phú nhuận, homestay Phú Nhuận, khách sạn nguyễn công hoan, thuê phòng nguyễn công hoan, gần sân bay tân sơn nhất, căn hộ ngắn hạn sài gòn, tự nhận phòng 24/7, combo 3h 6h qua đêm phòng ngày, haven signature",
 	icons: {
 		icon: [
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
 	openGraph: {
 		type: "website",
 		title: "Every Inn | Hotels, Homes and Everything In",
-		description: "Căn hộ mini tối giản, tự nhận phòng 24/7. Gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày từ 256.000đ. Nhắn tin Instagram đặt ngay.",
+		description: "Căn hộ mini tối giản, tự nhận phòng 24/7. Gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày từ 288.000đ. Nhắn tin Instagram đặt ngay.",
 		url: "https://everyinn.vn/",
 		images: [
 			{
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
 	twitter: {
 		card: "summary_large_image",
 		title: "Every Inn | Hotels, Homes and Everything In – Phú Nhuận, TP.HCM",
-		description: "Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan. Gần sân bay Tân Sơn Nhất. Giá từ 256.000đ.",
+		description: "Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan. Gần sân bay Tân Sơn Nhất. Giá từ 288.000đ.",
 		images: ["https://res.cloudinary.com/everyinn/image/upload/c_fill,w_1200,h_630,q_80,f_auto/v1785586726/20_sc3x5z.jpg"],
 	},
 	other: {

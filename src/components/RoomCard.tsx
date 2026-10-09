@@ -3,7 +3,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { RoomInfo } from '../data/rooms';
-import { getCheapestPrice, getEffectivePrices, PRICE_MANAGER, fmtVND } from '../data/pricing';
+import { getCheapestPrice, getEffectivePrices, fmtVND } from '../data/pricing';
 import { AreaIcon, GuestsIcon, FloorIcon } from './Icons';
 
 interface RoomCardProps {
@@ -12,7 +12,7 @@ interface RoomCardProps {
 
 export default function RoomCard({ room }: RoomCardProps) {
   const cheapest = getCheapestPrice(room.priceClass);
-  const { isSale } = getEffectivePrices(room.priceClass);
+  const { isSale, badgeText } = getEffectivePrices(room.priceClass);
 
   const images = room.images.gallery?.length ? room.images.gallery : [room.images.thumbnail];
   const total = images.length;
@@ -149,7 +149,7 @@ export default function RoomCard({ room }: RoomCardProps) {
         </div>
 
         <span className="room-badge">Tầng {room.floor}</span>
-        {isSale && <span className="room-sale-badge">{PRICE_MANAGER.promo.badgeText}</span>}
+        {isSale && <span className="room-sale-badge">{badgeText}</span>}
 
         {total > 1 && (
           <>

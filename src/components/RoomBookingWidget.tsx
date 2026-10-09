@@ -10,6 +10,7 @@ import {
   fmtVND,
 } from '../data/pricing';
 import { IgIcon } from './Icons';
+import CheckinDatePicker from './CheckinDatePicker';
 
 const IG_URL = 'https://www.instagram.com/everyinn.home/';
 
@@ -53,29 +54,24 @@ export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps
         <h3 className="bw-title">Kiểm tra giá &amp; Đặt phòng</h3>
 
         <div className="bw-date-wrap">
-          <label htmlFor="bw-date" className="bw-date-label">📅 Chọn ngày check-in</label>
-          <input
-            type="date"
+          <CheckinDatePicker
             id="bw-date"
-            value={dateStr}
-            min={todayStr}
-            className="bw-date-input"
-            onChange={(e) => {
-              const val = e.target.value;
-              if (!val) {
-                setDate(new Date());
-                return;
-              }
-              const [y, m, d] = val.split('-').map(Number);
-              setDate(new Date(y, m - 1, d));
-            }}
+            selectedDate={date}
+            onChange={setDate}
+            theme="light"
+            label="Nhận phòng"
+            showShortcuts={true}
           />
         </div>
 
         {mounted ? (
           result.isSale ? (
             <div className="bw-status sale">
-              🎉 {PRICE_MANAGER.promo.label} {PRICE_MANAGER.promo.badgeText} ({isToday ? 'Hôm nay – ' : ''}{dayName})
+              🎉 {result.label} {result.badgeText} ({isToday ? 'Hôm nay – ' : ''}{dayName})
+            </div>
+          ) : result.reason === 'day_excluded' ? (
+            <div className="bw-status neutral">
+              ℹ️ Giá tiêu chuẩn – {isToday ? 'Hôm nay (' + dayShort + ')' : `${dayName} (${dayShort})`} (Thứ 7 không áp dụng giảm giá)
             </div>
           ) : (
             <div className="bw-status neutral">
@@ -107,7 +103,7 @@ export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps
                 <div className="bw-price-val">
                   {diff && <span className="bw-orig">{fmtVND(orig)}</span>}
                   <span className="bw-final">{fmtVND(p)}</span>
-                  {diff && <span className="bw-badge">{PRICE_MANAGER.promo.badgeText}</span>}
+                  {diff && <span className="bw-badge">{result.badgeText}</span>}
                 </div>
               </div>
             );
