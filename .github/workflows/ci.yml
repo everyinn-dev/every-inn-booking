@@ -1,0 +1,64 @@
+name: CI
+
+# Verification only — this pipeline NEVER deploys.
+#
+# Deployment is owned by Cloudflare Workers Builds (connected per Worker in the dashboard):
+#   push to `main` → builds & deploys the production Worker
+#   push to `dev`  → builds & deploys the `*-dev` UAT Worker
+#
+# Keeping CD in exactly one system avoids double deploys and version churn (EI-PHASE1-STATUS D-08).
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NPM_CONFIG_FUND: "false"
+  NPM_CONFIG_AUDIT: "false"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    name: Lint, typecheck & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --prefer-offline
+
+      # Next's incremental build cache — the single biggest CI time saver here.
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**/*.[jt]s', 'src/**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-
+            ${{ runner.os }}-next-
+
+      # ESLint fails the job on `error` severity only; warnings are reported but non-blocking.
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # Mirrors what Cloudflare Workers Builds runs, so breakage is caught here first.
+      - name: Build (OpenNext → Workers)
+        run: npx opennextjs-cloudflare build
+
