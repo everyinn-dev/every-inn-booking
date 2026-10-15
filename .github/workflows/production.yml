@@ -1,0 +1,79 @@
+name: Production (manual)
+
+# Production deploys are MANUAL ONLY and never triggered by a push.
+# This is the single "go PRO" switch for the public landing page.
+#
+# To release:
+#   Actions → "Production (manual)" → Run workflow → branch `main` → type GO-PRO → Run.
+#
+# ⚠️ PRE-FLIGHT (EI-PHASE1-STATUS P-3): the production Worker `saigonliving` has no
+# CDP_CORE service binding yet. Do NOT merge `dev` into `main` and release
+# until that binding exists, or /api/loyalty/check will return 503.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type GO-PRO to confirm a PRODUCTION deploy'
+        required: true
+        default: ''
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  NPM_CONFIG_FUND: "false"
+  NPM_CONFIG_AUDIT: "false"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  guard:
+    name: Confirm intent
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validate confirmation phrase
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "GO-PRO" ]; then
+            echo "::error title=Confirmation failed::You must type exactly GO-PRO to deploy production."
+            exit 1
+          fi
+      - name: Validate branch
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error title=Wrong branch::Production can only be released from main (got ${{ github.ref }})."
+            exit 1
+          fi
+
+  deploy:
+    name: Verify, build & deploy to production
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --prefer-offline
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build (OpenNext → Workers)
+        run: npx opennextjs-cloudflare build
+
+      - name: Deploy to production
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env=""
+
