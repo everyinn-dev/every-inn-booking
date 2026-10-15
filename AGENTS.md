@@ -1,6 +1,6 @@
 # Project Agent Guidelines: Cloudflare & Booking Platform
 
-> 🚦 **READ FIRST — cross-agent source of truth**: [`../EI_PHASE1_STATUS.md`](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/EI_PHASE1_STATUS.md)
+> 🚦 **READ FIRST — cross-agent source of truth**: [`../everyinn-platform-docs/EI_PHASE1_STATUS.md`](../everyinn-platform-docs/EI_PHASE1_STATUS.md) (sibling repo `everyinn-platform-docs`)
 > Deploy state, Cloudflare resource IDs, the Phase 1 task board and open owner decisions live **only** there.
 > This Landing app owns the loyalty lookup BFF (`src/app/api/loyalty/check`) which calls CDP Core via the `CDP_CORE` Service Binding.
 > Update the status file before ending any session that changes anything.
