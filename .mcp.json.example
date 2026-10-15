@@ -31,6 +31,23 @@
       "headers": {
         "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
       }
+    },
+    "cloudinary": {
+      "command": "npx",
+      "args": ["-y", "@cloudinary/asset-management-mcp", "start"],
+      "env": {
+        "CLOUDINARY_CLOUD_NAME": "everyinn",
+        "CLOUDINARY_API_KEY": "",
+        "CLOUDINARY_API_SECRET": ""
+      }
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": ["-y", "shadcn@latest", "mcp"]
+    },
+    "agentic-awesome-skills": {
+      "command": "npx",
+      "args": ["-y", "--package=agentic-awesome-skills", "aas-mcp"]
     }
   }
 }

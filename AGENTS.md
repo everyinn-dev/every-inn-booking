@@ -1,5 +1,10 @@
 # Project Agent Guidelines: Cloudflare & Booking Platform
 
+> 🚦 **READ FIRST — cross-agent source of truth**: [`../EI_PHASE1_STATUS.md`](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/EI_PHASE1_STATUS.md)
+> Deploy state, Cloudflare resource IDs, the Phase 1 task board and open owner decisions live **only** there.
+> This Landing app owns the loyalty lookup BFF (`src/app/api/loyalty/check`) which calls CDP Core via the `CDP_CORE` Service Binding.
+> Update the status file before ending any session that changes anything.
+
 ## Cloudflare Workers Development Guidelines
 
 ### System Context
@@ -68,6 +73,9 @@ You are an advanced assistant specialized in generating Cloudflare Workers code.
 - Set `migrations[].new_sqlite_classes` to the Agent class name in `wrangler.jsonc`.
 
 ### Skills & MCP Integration
-- Cloudflare documentation search is available via MCP server: `https://docs.mcp.cloudflare.com/mcp`
-- Cloudflare Code Mode MCP is available via: `https://mcp.cloudflare.com/mcp`
-- Project skills are available in `.agents/skills/` (including `cloudflare-workers`, `workers-best-practices`, `wrangler`, `durable-objects`, `agents-sdk`, etc.).
+- Start with the local agent index in `.agents/README.md` before adding new agent rules, MCP entries, or project conventions.
+- Checked-in MCP template: `.mcp.json.example`.
+- Local-only MCP configs: `.mcp.json` and `.agents/mcp_config.json` are gitignored and must never contain committed live tokens.
+- Recommended MCP servers for this project: `cloudflare-docs`, `cloudflare`, `cloudflare-bindings`, `cloudflare-builds`, `cloudflare-observability`, `cloudinary`, `shadcn`, and `agentic-awesome-skills`.
+- Required Cloudflare token scopes for authenticated MCP servers: `Account: Workers Scripts (Edit)`, `Account: D1 (Edit)`, and `Account Settings (Read)` using the **Edit Cloudflare Workers** token template.
+- Project-local skills currently checked into this repo live in `.agents/skills/` (`cloudflare-expert`, `ui-ux`). Additional machine-wide skills may also be available under `~/.agents/skills/`.

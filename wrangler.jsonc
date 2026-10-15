@@ -23,5 +23,15 @@
 		"enabled": true,
 		"head_sampling_rate": 1
 	},
-	"upload_source_maps": false
+        "upload_source_maps": false,
+        // Loyalty lookup (Phase 1.4). Production binding to `everyinn-cdp-core` is added at cutover (Phase 1.5).
+        "env": {
+                "dev": {
+                        "name": "saigonliving-dev",
+                        "main": ".open-next/worker.js",
+                        "assets": { "binding": "ASSETS", "directory": ".open-next/assets" },
+                        "services": [{ "binding": "CDP_CORE", "service": "everyinn-cdp-core-dev" }],
+                        "observability": { "enabled": true, "head_sampling_rate": 1 }
+                }
+        }
 }

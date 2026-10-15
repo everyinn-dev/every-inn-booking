@@ -2239,4 +2239,27 @@ ul {
   margin-top: var(--sp-xl);
   padding: var(--sp-xl) 0;
   background: var(--c-gray-50);
-}
+}/* ── Loyalty lookup ───────────────────────────── */
+.ll-section { padding: 64px 0; background: var(--c-gray-50); }
+.ll-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ll-form { display: flex; gap: 8px; max-width: 480px; margin: 24px auto 0; }
+.ll-form input { flex: 1; min-width: 0; padding: 14px 16px; font: inherit; font-size: 16px; border: 1px solid var(--c-gray-200); border-radius: 10px; background: var(--c-white); }
+.ll-form button { padding: 14px 20px; font: inherit; font-weight: 600; color: var(--c-white); background: var(--c-black); border: 0; border-radius: 10px; cursor: pointer; }
+.ll-form button:disabled { opacity: .6; cursor: progress; }
+.ll-status { max-width: 480px; margin: 12px auto 0; text-align: center; min-height: 24px; }
+.ll-error { color: #b3261e; }
+.ll-note { color: var(--c-gray-600); }
+.ll-card { max-width: 480px; margin: 16px auto 0; padding: 20px; background: var(--c-white); border: 1px solid var(--c-gray-200); border-radius: 14px; }
+.ll-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ll-phone { font-weight: 600; letter-spacing: .04em; }
+.ll-badge { padding: 4px 12px; font-size: var(--fz-sm); font-weight: 600; border-radius: 999px; background: var(--c-gray-100); }
+.ll-bronze { background: #f0dfcc; color: #7a4b1f; }
+.ll-silver { background: #e6e8ec; color: #454c57; }
+.ll-gold { background: #f6e7b4; color: #7a5a00; }
+.ll-meta { margin: 8px 0 0; color: var(--c-gray-600); font-size: var(--fz-sm); }
+.ll-progress { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin-top: 16px; }
+.ll-dot { aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--c-gray-200); }
+.ll-dot.on { background: var(--c-accent); border-color: var(--c-accent); }
+.ll-milestones { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+.ll-milestones li { display: flex; flex-direction: column; padding: 10px 12px; border: 1px dashed var(--c-gray-200); border-radius: 10px; font-size: var(--fz-sm); color: var(--c-gray-600); }
+.ll-milestones li.reached { border-style: solid; border-color: var(--c-accent); color: var(--c-black); }
