@@ -42,6 +42,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { env } = await getCloudflareContext({ async: true });
+  const loyaltyEnabled = (env as unknown as { LOYALTY_ENABLED?: string }).LOYALTY_ENABLED ?? (typeof process !== "undefined" ? process.env?.LOYALTY_ENABLED : undefined);
+  if (loyaltyEnabled === "false") {
+    return json({ error: "feature_disabled", message: "Chương trình tra cứu điểm đang được cập nhật." }, 503);
+  }
+
   const cdp = (env as unknown as { CDP_CORE?: Fetcher }).CDP_CORE;
   if (!cdp) return json({ error: "unavailable" }, 503);
 

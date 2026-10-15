@@ -34,12 +34,12 @@
     "build": "next build",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv env.d.ts",
     "check": "npm run build && tsc",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy": "echo 'Direct laptop deploy disabled. Deploys are managed by Cloudflare Workers Builds via dev/main branch pushes.' && exit 1",
     "dev": "next dev",
     "lint": "eslint",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "preview": "opennextjs-cloudflare preview",
     "start": "next start",
-    "cf:build": "opennextjs-cloudflare build",
+    "cf:build": "npm run lint && tsc --noEmit && opennextjs-cloudflare build",
     "cf:deploy": "wrangler deploy --env=\"\"",
     "cf:deploy:dev": "wrangler deploy --env dev"
   }
