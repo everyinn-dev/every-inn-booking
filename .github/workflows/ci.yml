@@ -60,5 +60,13 @@ jobs:
 
       # Mirrors what Cloudflare Workers Builds runs, so breakage is caught here first.
       - name: Build (OpenNext → Workers)
-        run: npx opennextjs-cloudflare build
+        run: npm run cf:build
+
+      # Both Workers are dry-run so a broken env.dev cannot reach UAT.
+      - name: Dry-run production Worker
+        run: npm run cf:deploy -- --dry-run --outdir /tmp/dry-prod
+
+      - name: Dry-run UAT Worker
+        run: npm run cf:deploy:dev -- --dry-run --outdir /tmp/dry-dev
+
 

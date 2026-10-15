@@ -4,6 +4,17 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
+
+	// ──────────────────────────────────────────────────────────────────────────────
+	// This repo builds exactly TWO Workers. No preview/version URLs are used.
+	//
+	//   branch `main` → `saigonliving`      (production)  `npm run cf:deploy`
+	//   branch `dev`  → `saigonliving-dev`  (UAT)         `npm run cf:deploy:dev`
+	//
+	// Top level below = PRODUCTION. `env.dev` = UAT. Bindings are NOT inherited between
+	// them, so each block lists its own Service Bindings in full.
+	// ─────────────────────────────────────────────────────────────────────────────
+
 	"name": "saigonliving",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2025-03-07",
@@ -15,6 +26,8 @@
 		"encoder_stream_spec_compliant_backpressure",
 		"writable_stream_spec_compliant_writer"
 	],
+	// Version preview URLs are disabled: UAT is the separate `saigonliving-dev` Worker.
+	"preview_urls": false,
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".open-next/assets"
@@ -24,14 +37,16 @@
 		"head_sampling_rate": 1
 	},
         "upload_source_maps": false,
-        // Loyalty lookup (Phase 1.4). Production binding to `everyinn-cdp-core` is added at cutover (Phase 1.5).
-        "env": {
-                "dev": {
-                        "name": "saigonliving-dev",
-                        "main": ".open-next/worker.js",
-                        "assets": { "binding": "ASSETS", "directory": ".open-next/assets" },
-                        "services": [{ "binding": "CDP_CORE", "service": "everyinn-cdp-core-dev" }],
-                        "observability": { "enabled": true, "head_sampling_rate": 1 }
-                }
-        }
+	// Production CDP_CORE binding is added at cutover (Phase 1.5, P-3). Until then the
+	// loyalty lookup must not be merged to `main`.
+	"env": {
+		"dev": {
+			"name": "saigonliving-dev",
+			"main": ".open-next/worker.js",
+			"preview_urls": false,
+			"assets": { "binding": "ASSETS", "directory": ".open-next/assets" },
+			"services": [{ "binding": "CDP_CORE", "service": "everyinn-cdp-core-dev" }],
+			"observability": { "enabled": true, "head_sampling_rate": 1 }
+		}
+	}
 }
