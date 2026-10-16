@@ -261,7 +261,7 @@
           "occurredAt": { "type": "string", "description": "Immutable booking.created_at (ISO-8601 with Z/offset), never the retry time" },
           "guest": {
             "type": "object",
-            "properties": { "fullName": { "type": "string", "maxLength": 120 }, "instagram": { "type": "string", "maxLength": 120 }, "facebook": { "type": "string", "maxLength": 200 } }
+            "properties": { "fullName": { "type": "string", "maxLength": 120 }, "instagram": { "type": "string", "maxLength": 120 }, "facebook": { "type": "string", "maxLength": 200 }, "zalo": { "type": "string", "maxLength": 120 } }
           },
           "roomClass": { "type": "string", "maxLength": 32 }
         }
@@ -399,7 +399,7 @@
       "AdminCustomer": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["customerId", "phone", "phoneNational", "fullName", "instagram", "facebook", "internalNotes", "preferredRoomClass", "isBlocked", "marketingConsent", "loyalty", "legacy", "reconciliationStatus", "version", "createdAt", "updatedAt"],
+        "required": ["customerId", "phone", "phoneNational", "fullName", "instagram", "facebook", "zalo", "internalNotes", "preferredRoomClass", "isBlocked", "marketingConsent", "loyalty", "legacy", "reconciliationStatus", "version", "createdAt", "updatedAt"],
         "properties": {
           "customerId": { "type": "string" },
           "phone": { "type": ["string", "null"], "description": "E.164" },
@@ -407,6 +407,7 @@
           "fullName": { "type": ["string", "null"] },
           "instagram": { "type": ["string", "null"] },
           "facebook": { "type": ["string", "null"] },
+          "zalo": { "type": ["string", "null"] },
           "internalNotes": { "type": ["string", "null"] },
           "preferredRoomClass": { "type": ["string", "null"] },
           "isBlocked": { "type": "boolean" },
@@ -465,6 +466,7 @@
           "fullName": { "type": "string", "maxLength": 120 },
           "instagram": { "type": "string", "maxLength": 120 },
           "facebook": { "type": "string", "maxLength": 200 },
+          "zalo": { "type": "string", "maxLength": 120 },
           "internalNotes": { "type": "string", "maxLength": 2000 },
           "isBlocked": { "type": "boolean" },
           "marketingConsent": { "type": "string", "enum": ["unknown", "granted", "denied"] }
