@@ -39,6 +39,7 @@
     "lint": "eslint",
     "preview": "opennextjs-cloudflare preview",
     "start": "next start",
+    "test": "node --experimental-strip-types --test \"test/**/*.test.mjs\"",
     "cf:build": "npm run lint && tsc --noEmit && opennextjs-cloudflare build",
     "cf:deploy": "wrangler deploy --env=\"\"",
     "cf:deploy:dev": "wrangler deploy --env dev"

@@ -58,6 +58,9 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Test
+        run: npm test --if-present
+
       # Mirrors what Cloudflare Workers Builds runs, so breakage is caught here first.
       - name: Build (OpenNext → Workers)
         run: npm run cf:build

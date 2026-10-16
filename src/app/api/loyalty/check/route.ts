@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export const dynamic = "force-dynamic";
@@ -9,15 +8,33 @@ const HEADERS = {
 };
 
 function json(body: unknown, status = 200) {
-  return NextResponse.json(body, { status, headers: HEADERS });
+  return Response.json(body, { status, headers: HEADERS });
+}
+
+let testEnvOverride: { CDP_CORE?: Fetcher; LOYALTY_ENABLED?: string } | null = null;
+
+/** Override bindings for unit testing without Cloudflare OpenNext runtime. */
+export function setTestEnv(override: { CDP_CORE?: Fetcher; LOYALTY_ENABLED?: string } | null) {
+  testEnvOverride = override;
+}
+
+async function getEnv(): Promise<{ CDP_CORE?: Fetcher; LOYALTY_ENABLED?: string }> {
+  if (testEnvOverride) return testEnvOverride;
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    return env as unknown as { CDP_CORE?: Fetcher; LOYALTY_ENABLED?: string };
+  } catch {
+    return {};
+  }
 }
 
 /** Same-origin only: the Origin (when sent) must match this request's host. */
-function sameOrigin(req: NextRequest): boolean {
+function sameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
   if (!origin) return true; // non-browser clients; CDP still validates input
   try {
-    return new URL(origin).host === req.nextUrl.host;
+    const reqHost = (req as { nextUrl?: URL }).nextUrl?.host || new URL(req.url).host;
+    return new URL(origin).host === reqHost;
   } catch {
     return false;
   }
@@ -27,7 +44,7 @@ function sameOrigin(req: NextRequest): boolean {
  * Landing BFF → CDP Core public-safe lookup (EI-OTA-ARCH-001 §Phase 1.4).
  * Returns only masked phone, tier and stamp progress. The raw phone is never logged or echoed.
  */
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   if (!sameOrigin(req)) return json({ error: "forbidden" }, 403);
 
   let phone = "";
@@ -41,14 +58,16 @@ export async function POST(req: NextRequest) {
     return json({ error: "invalid_phone" }, 400);
   }
 
-  const { env } = await getCloudflareContext({ async: true });
-  const loyaltyEnabled = (env as unknown as { LOYALTY_ENABLED?: string }).LOYALTY_ENABLED ?? (typeof process !== "undefined" ? process.env?.LOYALTY_ENABLED : undefined);
+  const env = await getEnv();
+  const loyaltyEnabled = env.LOYALTY_ENABLED ?? (typeof process !== "undefined" ? process.env?.LOYALTY_ENABLED : undefined);
   if (loyaltyEnabled === "false") {
     return json({ error: "feature_disabled", message: "Chương trình tra cứu điểm đang được cập nhật." }, 503);
   }
 
-  const cdp = (env as unknown as { CDP_CORE?: Fetcher }).CDP_CORE;
-  if (!cdp) return json({ error: "unavailable" }, 503);
+  const cdp = env.CDP_CORE;
+  if (!cdp) {
+    return json({ found: false, degraded: true, error: "unavailable" }, 503);
+  }
 
   try {
     const res = await cdp.fetch("https://cdp-core.internal/public-safe/v1/loyalty/lookup", {
@@ -63,16 +82,17 @@ export async function POST(req: NextRequest) {
     });
     if (res.status === 400 || res.status === 422) return json({ error: "invalid_phone" }, 400);
     if (res.status === 429) return json({ error: "rate_limited" }, 429);
-    if (!res.ok) return json({ error: "unavailable" }, 503);
+    if (!res.ok) {
+      return json({ found: false, degraded: true, error: "unavailable" }, 503);
+    }
     return json(await res.json());
   } catch {
     // Never include the phone or upstream details in logs/responses.
     console.error("loyalty lookup upstream failure");
-    return json({ error: "unavailable" }, 503);
+    return json({ found: false, degraded: true, error: "unavailable" }, 503);
   }
 }
 
 export function GET() {
   return json({ error: "method_not_allowed" }, 405);
 }
-
