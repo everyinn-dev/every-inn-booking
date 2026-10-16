@@ -1,0 +1,563 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Every Inn CDP & Loyalty Core — internal API",
+    "version": "cdp-internal-v1",
+    "description": "Provider-owned contract for everyinn-cdp-core (EI-OTA-ARCH-001 §12). Reachable ONLY through HTTP-style Service Bindings (workers_dev=false, preview_urls=false, no routes). `X-EI-Caller` is an authorization label checked per operation (`x-callers`), not a credential. All responses are `Cache-Control: private, no-store`. Breaking changes require a new contract version (CONTRACT_VERSION) approved by the CDP owner before consumers update."
+  },
+  "servers": [{ "url": "https://cdp.internal", "description": "Service Binding (hostname ignored)" }],
+  "x-service-bindings": {
+    "production": "everyinn-cdp-core",
+    "dev": "everyinn-cdp-core-dev"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "x-callers": [],
+        "responses": {
+          "200": { "description": "Liveness", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } } }
+        }
+      }
+    },
+    "/public-safe/v1/loyalty/lookup": {
+      "post": {
+        "operationId": "lookupPublicLoyalty",
+        "summary": "Public-safe loyalty summary by phone (Landing BFF). Same minimal shape for every not-found case.",
+        "x-callers": ["landing-bff", "admin-bff"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/RequestId" }, { "$ref": "#/components/parameters/CorrelationId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PhoneRequest" } } } },
+        "responses": {
+          "200": { "description": "Found or not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublicLoyalty" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "413": { "$ref": "#/components/responses/Error" },
+          "415": { "$ref": "#/components/responses/Error" },
+          "422": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/accruals": {
+      "post": {
+        "operationId": "accrueBooking",
+        "summary": "Exactly-once loyalty accrual for one CONFIRMED booking. Replays (same commandId or bookingId with identical bookingId/phone/occurredAt) return the original result with 200.",
+        "x-callers": ["booking-core"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/RequestId" }, { "$ref": "#/components/parameters/CorrelationId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccrualRequest" } } } },
+        "responses": {
+          "201": { "description": "Recorded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccrualResponse" } } } },
+          "200": { "description": "Replayed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccrualResponse" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "422": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/booking-outcomes": {
+      "post": {
+        "operationId": "recordBookingOutcome",
+        "summary": "Idempotent cancel/no-show metric. Never reverses tier or stamps (mock Phase 1 policy).",
+        "x-callers": ["booking-core"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/RequestId" }, { "$ref": "#/components/parameters/CorrelationId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OutcomeRequest" } } } },
+        "responses": {
+          "201": { "description": "Recorded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OutcomeResponse" } } } },
+          "200": { "description": "Replayed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OutcomeResponse" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "422": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/customers/loyalty-context": {
+      "post": {
+        "operationId": "getLoyaltyContext",
+        "summary": "Tier snapshot + ADVISORY next-accrual preview for quotes. The authoritative reward is the accrual result.",
+        "x-callers": ["booking-core", "admin-bff"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoyaltyContextRequest" } } } },
+        "responses": {
+          "200": { "description": "Context", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoyaltyContext" } } } },
+          "422": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/customers/lookup": {
+      "post": {
+        "operationId": "lookupCustomer",
+        "summary": "Full customer profile by phone for authorized staff (Admin BFF) or Booking Core.",
+        "x-callers": ["admin-bff", "booking-core"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/ActorId" }, { "$ref": "#/components/parameters/ActorRole" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PhoneRequest" } } } },
+        "responses": {
+          "200": { "description": "Lookup result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerLookup" } } } },
+          "422": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/customers/{customerId}": {
+      "parameters": [{ "$ref": "#/components/parameters/CustomerId" }],
+      "get": {
+        "operationId": "getCustomer",
+        "x-callers": ["admin-bff"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }],
+        "responses": {
+          "200": { "description": "Customer", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerEnvelope" } } } },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "patch": {
+        "operationId": "updateCustomerProfile",
+        "summary": "Profile/notes/consent update with optimistic version. Requires a staff actor. Audit stores changed field names only.",
+        "x-callers": ["admin-bff"],
+        "parameters": [
+          { "$ref": "#/components/parameters/Caller" },
+          { "$ref": "#/components/parameters/ActorId", "required": true },
+          { "$ref": "#/components/parameters/ActorRole", "required": true },
+          { "$ref": "#/components/parameters/ActorName" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerPatch" } } } },
+        "responses": {
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerEnvelope" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "422": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/customers/{customerId}/loyalty": {
+      "parameters": [{ "$ref": "#/components/parameters/CustomerId" }],
+      "get": {
+        "operationId": "getAdminLoyaltySummary",
+        "x-callers": ["admin-bff"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }],
+        "responses": {
+          "200": { "description": "Customer + recent cycles and stamp entries", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoyaltyDetail" } } } },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/loyalty/rules": {
+      "get": {
+        "operationId": "getActiveLoyaltyRules",
+        "x-callers": ["admin-bff", "booking-core"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }],
+        "responses": {
+          "200": { "description": "Active versioned rules", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Rules" } } } },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Caller": { "name": "X-EI-Caller", "in": "header", "required": true, "schema": { "type": "string", "enum": ["admin-bff", "booking-core", "landing-bff"] } },
+      "RequestId": { "name": "X-Request-Id", "in": "header", "required": false, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{8,80}$" } },
+      "CorrelationId": { "name": "X-Correlation-Id", "in": "header", "required": false, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{8,80}$" } },
+      "ActorId": { "name": "X-EI-Actor-Id", "in": "header", "required": false, "schema": { "type": "string", "pattern": "^\\d{1,12}$" } },
+      "ActorRole": { "name": "X-EI-Actor-Role", "in": "header", "required": false, "schema": { "type": "string", "enum": ["manager", "receptionist"] } },
+      "ActorName": { "name": "X-EI-Actor-Name", "in": "header", "required": false, "description": "URI-encoded display name", "schema": { "type": "string" } },
+      "CustomerId": { "name": "customerId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^cus_[A-Za-z0-9-]{8,64}$" } }
+    },
+    "responses": {
+      "Error": { "description": "Stable error shape", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message", "request_id"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "request_id": { "type": "string" },
+              "details": { "type": "object" }
+            }
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "service", "contract", "env"],
+        "properties": {
+          "status": { "const": "ok" },
+          "service": { "const": "everyinn-cdp-core" },
+          "contract": { "type": "string" },
+          "env": { "type": "string", "enum": ["dev", "production"] }
+        }
+      },
+      "Instant": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$" },
+      "Tier": { "type": "string", "enum": ["not_member", "bronze", "silver", "gold"] },
+      "PhoneRequest": {
+        "type": "object",
+        "required": ["phone"],
+        "properties": { "phone": { "type": "string", "description": "0xxxxxxxxx | 84xxxxxxxxx | +84xxxxxxxxx; separators ignored", "maxLength": 32 } }
+      },
+      "NextTier": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["code", "remainingBookings"],
+        "properties": { "code": { "$ref": "#/components/schemas/Tier" }, "remainingBookings": { "type": "integer", "minimum": 1 } }
+      },
+      "Milestone": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "label", "status"],
+        "properties": { "step": { "type": "integer" }, "label": { "type": "string" }, "status": { "type": "string", "enum": ["reached", "upcoming"] } }
+      },
+      "PublicStamp": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "currentStep", "maxSteps", "startsAt", "expiresAt", "nextMilestoneStep", "milestones"],
+        "properties": {
+          "status": { "type": "string", "enum": ["none", "active", "completed", "expired"] },
+          "currentStep": { "type": "integer", "minimum": 0 },
+          "maxSteps": { "type": "integer", "minimum": 1 },
+          "startsAt": { "type": ["string", "null"] },
+          "expiresAt": { "type": ["string", "null"] },
+          "nextMilestoneStep": { "type": ["integer", "null"] },
+          "milestones": { "type": "array", "items": { "$ref": "#/components/schemas/Milestone" } }
+        }
+      },
+      "PublicLoyalty": {
+        "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["found"], "properties": { "found": { "const": false } } },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["found", "phoneMasked", "tier", "lifetimeBookingCount", "nextTier", "stamp", "rulesVersion"],
+            "properties": {
+              "found": { "const": true },
+              "phoneMasked": { "type": "string", "pattern": "^0\\d\\*{6}\\d{2}$" },
+              "tier": { "$ref": "#/components/schemas/Tier" },
+              "lifetimeBookingCount": { "type": "integer", "minimum": 0 },
+              "nextTier": { "$ref": "#/components/schemas/NextTier" },
+              "stamp": { "$ref": "#/components/schemas/PublicStamp" },
+              "rulesVersion": { "type": "string" }
+            }
+          }
+        ]
+      },
+      "AccrualRequest": {
+        "type": "object",
+        "required": ["commandId", "bookingId", "phone", "occurredAt"],
+        "properties": {
+          "commandId": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{8,80}$" },
+          "bookingId": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,64}$" },
+          "phone": { "type": "string" },
+          "occurredAt": { "type": "string", "description": "Immutable booking.created_at (ISO-8601 with Z/offset), never the retry time" },
+          "guest": {
+            "type": "object",
+            "properties": { "fullName": { "type": "string", "maxLength": 120 }, "instagram": { "type": "string", "maxLength": 120 }, "facebook": { "type": "string", "maxLength": 200 } }
+          },
+          "roomClass": { "type": "string", "maxLength": 32 }
+        }
+      },
+      "Reward": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["milestoneStep", "rewardType", "rewardValue", "label"],
+        "properties": {
+          "milestoneStep": { "type": "integer" },
+          "rewardType": { "const": "fixed_discount" },
+          "rewardValue": { "type": "integer", "minimum": 0, "description": "VND" },
+          "label": { "type": "string" }
+        }
+      },
+      "AccrualResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["commandId", "bookingId", "customerId", "ruleVersion", "occurredAt", "lifetimeBookingCount", "tier", "previousTier", "tierChanged", "stamp", "reward"],
+        "properties": {
+          "commandId": { "type": "string" },
+          "bookingId": { "type": "string" },
+          "customerId": { "type": "string" },
+          "ruleVersion": { "type": "string" },
+          "occurredAt": { "$ref": "#/components/schemas/Instant" },
+          "lifetimeBookingCount": { "type": "integer", "minimum": 1 },
+          "tier": { "$ref": "#/components/schemas/Tier" },
+          "previousTier": { "$ref": "#/components/schemas/Tier" },
+          "tierChanged": { "type": "boolean" },
+          "stamp": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["decision", "programCode", "cycleId", "isNewCycle", "stepAwarded", "currentStep", "maxSteps", "cycleStartsAt", "cycleExpiresAt"],
+            "properties": {
+              "decision": { "type": "string", "enum": ["open_cycle", "advance", "capped", "out_of_order"] },
+              "programCode": { "type": ["string", "null"] },
+              "cycleId": { "type": ["string", "null"] },
+              "isNewCycle": { "type": "boolean" },
+              "stepAwarded": { "type": ["integer", "null"] },
+              "currentStep": { "type": ["integer", "null"] },
+              "maxSteps": { "type": ["integer", "null"] },
+              "cycleStartsAt": { "type": ["string", "null"] },
+              "cycleExpiresAt": { "type": ["string", "null"] }
+            }
+          },
+          "reward": { "$ref": "#/components/schemas/Reward" },
+          "legacyBackfill": { "type": "boolean", "description": "Present (true) only for results created by the legacy backfill" }
+        }
+      },
+      "AccrualResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["result", "replayed"],
+        "properties": { "result": { "$ref": "#/components/schemas/AccrualResult" }, "replayed": { "type": "boolean" } }
+      },
+      "OutcomeRequest": {
+        "type": "object",
+        "required": ["commandId", "bookingId", "outcome", "phone", "occurredAt"],
+        "properties": {
+          "commandId": { "type": "string", "maxLength": 80 },
+          "bookingId": { "type": "string", "maxLength": 64 },
+          "outcome": { "type": "string", "enum": ["cancelled", "no_show"] },
+          "phone": { "type": "string" },
+          "occurredAt": { "type": "string" }
+        }
+      },
+      "OutcomeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["result", "replayed"],
+        "properties": {
+          "replayed": { "type": "boolean" },
+          "result": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["commandId", "bookingId", "outcome", "applied", "reason", "customerId", "loyaltyReversed"],
+            "properties": {
+              "commandId": { "type": "string" },
+              "bookingId": { "type": "string" },
+              "outcome": { "type": "string", "enum": ["cancelled", "no_show"] },
+              "applied": { "type": "boolean" },
+              "reason": { "type": "string", "enum": ["recorded", "customer_not_found"] },
+              "customerId": { "type": ["string", "null"] },
+              "loyaltyReversed": { "const": false }
+            }
+          }
+        }
+      },
+      "LoyaltyContextRequest": {
+        "type": "object",
+        "required": ["phone"],
+        "properties": { "phone": { "type": "string" }, "at": { "type": "string", "description": "Optional instant for the preview (defaults to now)" } }
+      },
+      "LoyaltyContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["found", "customerId", "tier", "lifetimeBookingCount", "rulesVersion", "nextAccrualPreview", "advisory"],
+        "properties": {
+          "found": { "type": "boolean" },
+          "customerId": { "type": ["string", "null"] },
+          "tier": { "$ref": "#/components/schemas/Tier" },
+          "lifetimeBookingCount": { "type": "integer", "minimum": 0 },
+          "rulesVersion": { "type": "string" },
+          "advisory": { "const": true },
+          "nextAccrualPreview": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["decision", "stepAwarded", "opensNewCycle", "reward", "tierAfter"],
+            "properties": {
+              "decision": { "type": "string", "enum": ["open_cycle", "advance", "capped", "out_of_order"] },
+              "stepAwarded": { "type": ["integer", "null"] },
+              "opensNewCycle": { "type": "boolean" },
+              "reward": { "$ref": "#/components/schemas/Reward" },
+              "tierAfter": { "$ref": "#/components/schemas/Tier" }
+            }
+          }
+        }
+      },
+      "AdminStamp": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "programCode", "currentStep", "maxSteps", "startsAt", "expiresAt", "nextMilestoneStep", "milestones", "cycleId"],
+        "properties": {
+          "status": { "type": "string", "enum": ["none", "active", "completed", "expired"] },
+          "programCode": { "type": "string" },
+          "currentStep": { "type": "integer", "minimum": 0 },
+          "maxSteps": { "type": "integer" },
+          "startsAt": { "type": ["string", "null"] },
+          "expiresAt": { "type": ["string", "null"] },
+          "nextMilestoneStep": { "type": ["integer", "null"] },
+          "milestones": { "type": "array", "items": { "$ref": "#/components/schemas/Milestone" } },
+          "cycleId": { "type": ["string", "null"] }
+        }
+      },
+      "AdminCustomer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["customerId", "phone", "phoneNational", "fullName", "instagram", "facebook", "internalNotes", "preferredRoomClass", "isBlocked", "marketingConsent", "loyalty", "legacy", "reconciliationStatus", "version", "createdAt", "updatedAt"],
+        "properties": {
+          "customerId": { "type": "string" },
+          "phone": { "type": ["string", "null"], "description": "E.164" },
+          "phoneNational": { "type": ["string", "null"] },
+          "fullName": { "type": ["string", "null"] },
+          "instagram": { "type": ["string", "null"] },
+          "facebook": { "type": ["string", "null"] },
+          "internalNotes": { "type": ["string", "null"] },
+          "preferredRoomClass": { "type": ["string", "null"] },
+          "isBlocked": { "type": "boolean" },
+          "marketingConsent": { "type": "string", "enum": ["unknown", "granted", "denied"] },
+          "loyalty": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tier", "tierRuleVersion", "lifetimeBookingCount", "nextTier", "cancelledCount", "noShowCount", "firstCountedAt", "lastCountedAt", "stamp", "rulesVersion"],
+            "properties": {
+              "tier": { "$ref": "#/components/schemas/Tier" },
+              "tierRuleVersion": { "type": "string" },
+              "lifetimeBookingCount": { "type": "integer" },
+              "nextTier": { "$ref": "#/components/schemas/NextTier" },
+              "cancelledCount": { "type": "integer" },
+              "noShowCount": { "type": "integer" },
+              "firstCountedAt": { "type": ["string", "null"] },
+              "lastCountedAt": { "type": ["string", "null"] },
+              "stamp": { "$ref": "#/components/schemas/AdminStamp" },
+              "rulesVersion": { "type": "string" }
+            }
+          },
+          "legacy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["totalSpent", "totalBookings", "loyaltyTier", "note"],
+            "properties": {
+              "totalSpent": { "type": ["integer", "null"] },
+              "totalBookings": { "type": ["integer", "null"] },
+              "loyaltyTier": { "type": ["string", "null"] },
+              "note": { "type": "string" }
+            }
+          },
+          "reconciliationStatus": { "type": "string", "enum": ["ok", "needs_review", "social_only"] },
+          "version": { "type": "integer", "minimum": 1 },
+          "createdAt": { "type": "string" },
+          "updatedAt": { "type": "string" }
+        }
+      },
+      "CustomerEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["customer"],
+        "properties": { "customer": { "$ref": "#/components/schemas/AdminCustomer" } }
+      },
+      "CustomerLookup": {
+        "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["found", "customer"], "properties": { "found": { "const": false }, "customer": { "type": "null" } } },
+          { "type": "object", "additionalProperties": false, "required": ["found", "customer"], "properties": { "found": { "const": true }, "customer": { "$ref": "#/components/schemas/AdminCustomer" } } }
+        ]
+      },
+      "CustomerPatch": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1 },
+          "fullName": { "type": "string", "maxLength": 120 },
+          "instagram": { "type": "string", "maxLength": 120 },
+          "facebook": { "type": "string", "maxLength": 200 },
+          "internalNotes": { "type": "string", "maxLength": 2000 },
+          "isBlocked": { "type": "boolean" },
+          "marketingConsent": { "type": "string", "enum": ["unknown", "granted", "denied"] }
+        }
+      },
+      "LoyaltyDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["customer", "cycles", "stampEntries"],
+        "properties": {
+          "customer": { "$ref": "#/components/schemas/AdminCustomer" },
+          "cycles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["cycleId", "programCode", "ruleVersion", "startsAt", "expiresAt", "currentStep", "maxSteps", "completedAt", "source"],
+              "properties": {
+                "cycleId": { "type": "string" },
+                "programCode": { "type": "string" },
+                "ruleVersion": { "type": "string" },
+                "startsAt": { "type": "string" },
+                "expiresAt": { "type": "string" },
+                "currentStep": { "type": "integer" },
+                "maxSteps": { "type": "integer" },
+                "completedAt": { "type": ["string", "null"] },
+                "source": { "type": "string", "enum": ["runtime", "legacy_backfill"] }
+              }
+            }
+          },
+          "stampEntries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["bookingId", "cycleId", "step", "occurredAt", "reward", "source"],
+              "properties": {
+                "bookingId": { "type": "string" },
+                "cycleId": { "type": "string" },
+                "step": { "type": "integer" },
+                "occurredAt": { "type": "string" },
+                "reward": {
+                  "type": ["object", "null"],
+                  "additionalProperties": false,
+                  "required": ["rewardType", "rewardValue", "label"],
+                  "properties": { "rewardType": { "const": "fixed_discount" }, "rewardValue": { "type": "integer" }, "label": { "type": "string" } }
+                },
+                "source": { "type": "string", "enum": ["runtime", "legacy_backfill"] }
+              }
+            }
+          }
+        }
+      },
+      "Rules": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rulesVersion", "tierRules", "stampProgram"],
+        "properties": {
+          "rulesVersion": { "type": "string" },
+          "tierRules": {
+            "type": "object",
+            "required": ["basis", "tiers"],
+            "properties": {
+              "basis": { "const": "lifetime_counted_bookings" },
+              "tiers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["code", "minBookings", "maxBookings"],
+                  "properties": { "code": { "$ref": "#/components/schemas/Tier" }, "minBookings": { "type": "integer" }, "maxBookings": { "type": ["integer", "null"] } }
+                }
+              }
+            }
+          },
+          "stampProgram": {
+            "type": "object",
+            "required": ["programCode", "cycleLifetimeDays", "maxSteps", "milestones"],
+            "properties": {
+              "programCode": { "type": "string" },
+              "cycleLifetimeDays": { "type": "integer" },
+              "maxSteps": { "type": "integer" },
+              "milestones": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["step", "rewardType", "rewardValue", "label"],
+                  "properties": { "step": { "type": "integer" }, "rewardType": { "const": "fixed_discount" }, "rewardValue": { "type": "integer" }, "label": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
