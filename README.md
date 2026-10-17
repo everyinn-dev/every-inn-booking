@@ -53,6 +53,34 @@ This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-opti
 | `npm run build && npm run deploy` | Deploy your production site to Cloudflare    |
 | `npm wrangler tail`               | View real-time logs for all Workers          |
 
+## Feature Configuration: Loyalty Lookup (Tra cứu thành viên & tem)
+
+The `LoyaltyLookup` component (`src/components/LoyaltyLookup.tsx`) supports an elegant **Coming Soon teaser mode** for production release pending finalized reward copy (`D-02` / `P-5`):
+
+- **Coming Soon Mode (`comingSoon={true}` - current default):**
+  - Renders a polished preview with an animated `✦ Sắp ra mắt` status pill, member perk highlights (Bronze/Silver/Gold tiers, 10-stamp rewards, instant lookup), and a softly-blurred, disabled search preview with an informative lock badge.
+  - Ensures visitors understand the upcoming benefits without being frustrated by dead clicks or unfinalized mock rewards.
+  - Layout is mobile-first and responsive down to 375px.
+
+### How to Re-enable Interactive Loyalty Lookup
+
+When the owner finalizes loyalty tiers and reward values, re-enabling full lookup is instantaneous:
+
+1. **Via Component Prop (Recommended):**
+   In `src/app/page.tsx`, change:
+   ```tsx
+   <LoyaltyLookup comingSoon={false} />
+   ```
+2. **Via Environment Variable:**
+   Set `NEXT_PUBLIC_LOYALTY_COMING_SOON=false` in your environment or Cloudflare Worker vars.
+
+3. **Backend Safeguard:**
+   The BFF route `/api/loyalty/check` additionally respects `LOYALTY_ENABLED`:
+   - If `LOYALTY_ENABLED="false"`, the endpoint safely returns HTTP 503 (`feature_disabled`).
+   - If not set or `"true"`, it forwards safe lookups to `CDP_CORE`.
+
+---
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
@@ -61,3 +89,4 @@ To learn more about Next.js, take a look at the following resources:
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+
