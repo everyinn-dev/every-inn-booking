@@ -17,6 +17,12 @@ export const cdn = (path: string, tx: string = '') => {
   if (!path) return '';
   const match = path.match(/image\/upload\/(.*)$/);
   const relPath = match ? match[1] : path.replace(/^\//, '');
+  if (relPath.startsWith('c_')) {
+    const slashIdx = relPath.indexOf('/');
+    const preTx = relPath.slice(0, slashIdx);
+    const rest = relPath.slice(slashIdx + 1);
+    return tx ? `${CDN_BASE}/${preTx}/${tx}/${rest}` : `${CDN_BASE}/${preTx}/${rest}`;
+  }
   return tx ? `${CDN_BASE}/${tx}/${relPath}` : `${CDN_BASE}/${relPath}`;
 };
 
@@ -54,7 +60,7 @@ export const ROOM_IMAGES = {
   r301: [
     'v1785587031/301_nzykxw.jpg',
     'v1792340338/IMG_4570_pjbehc.jpg',
-    'v1792340335/IMG_4566_vugwzx.jpg',
+    'c_crop,w_1228,h_1536,x_100,y_0/v1792340335/IMG_4566_vugwzx.jpg',
     'v1792340338/IMG_4584_h6zm3v.jpg',
     'v1792340340/IMG_4508_yxxuum.jpg',
     'v1785586714/7_arw0ue.jpg',
