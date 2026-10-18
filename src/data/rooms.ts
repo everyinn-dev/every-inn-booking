@@ -53,9 +53,14 @@ export const ROOM_IMAGES = {
   ],
   r301: [
     'v1785587031/301_nzykxw.jpg',
-    'v1785586717/6_nr2oqe.jpg',
-    'v1785586715/4_b1qbdo.jpg',
+    'v1792340338/IMG_4570_pjbehc.jpg',
+    'v1792340335/IMG_4566_vugwzx.jpg',
+    'v1792340338/IMG_4584_h6zm3v.jpg',
+    'v1792340340/IMG_4508_yxxuum.jpg',
     'v1785586714/7_arw0ue.jpg',
+    // Tạm off:
+    // 'v1785586717/6_nr2oqe.jpg',
+    // 'v1785586715/4_b1qbdo.jpg',
   ],
   r302: [
     'v1785587031/302_ilj56i.jpg',
