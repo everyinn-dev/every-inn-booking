@@ -9,7 +9,6 @@ const VI_DAYS_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 
 const PRICE_TYPES = [
   { key: 'combo3h', label: 'COMBO 3H', sub: '' },
-  { key: 'combo6h', label: 'COMBO 6H', sub: '' },
   { key: 'overnight', label: 'QUA ĐÊM', sub: '21h – 9h' },
   { key: 'dayroom', label: 'PHÒNG NGÀY', sub: '15h – 12h' },
 ];
@@ -131,7 +130,7 @@ export default function Pricing() {
           </div>
 
           <div className="pc-notes">
-            <p>+ Giờ tiếp theo: {fmtVND(EXTRA_HOUR_FEE)}/h (tối đa 2 giờ)</p>
+            <p>+ Giờ tiếp theo: {fmtVND(EXTRA_HOUR_FEE)}/h</p>
             {specialDeal.enabled && (
               <p className="pc-deal">
                 {specialDeal.emoji} {specialDeal.label} <em>(áp dụng Qua đêm &amp; Phòng ngày)</em>

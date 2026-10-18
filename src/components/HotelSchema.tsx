@@ -13,7 +13,7 @@ export default function HotelSchema() {
       'Every Inn Cầu Kiệu'
     ],
     description:
-      'Every Inn – Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu (Quận Phú Nhuận cũ), TP.HCM. Gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày từ 288.000đ.',
+      'Every Inn – Căn hộ mini tối giản, tự nhận phòng 24/7 tại 69/24L1 Nguyễn Công Hoan, Phường Cầu Kiệu (Quận Phú Nhuận cũ), TP.HCM. Gần sân bay Tân Sơn Nhất. Combo 3H, Qua đêm, Phòng ngày từ 288.000đ.',
     url: 'https://everyinn.vn/',
     logo: 'https://res.cloudinary.com/everyinn/image/upload/v1788681602/My%20Brand/LOGO_1_wbjveg.png',
     image: [
@@ -140,17 +140,8 @@ export default function HotelSchema() {
           },
           {
             '@type': 'Offer',
-            name: 'Combo 6 Giờ - Haven',
-            price: '600000',
-            priceCurrency: 'VND',
-            availability: 'https://schema.org/InStock',
-            validFrom: '2026-01-01',
-            url: 'https://everyinn.vn/#pricing',
-          },
-          {
-            '@type': 'Offer',
             name: 'Qua Đêm (21:00 - 09:00) - Haven',
-            price: '490000',
+            price: '520000',
             priceCurrency: 'VND',
             availability: 'https://schema.org/InStock',
             validFrom: '2026-01-01',
@@ -159,7 +150,7 @@ export default function HotelSchema() {
           {
             '@type': 'Offer',
             name: 'Phòng Ngày (15:00 - 12:00) - Haven',
-            price: '590000',
+            price: '620000',
             priceCurrency: 'VND',
             availability: 'https://schema.org/InStock',
             validFrom: '2026-01-01',
@@ -192,15 +183,6 @@ export default function HotelSchema() {
             '@type': 'Offer',
             name: 'Combo 3 Giờ - Signature',
             price: '360000',
-            priceCurrency: 'VND',
-            availability: 'https://schema.org/InStock',
-            validFrom: '2026-01-01',
-            url: 'https://everyinn.vn/#pricing',
-          },
-          {
-            '@type': 'Offer',
-            name: 'Combo 6 Giờ - Signature',
-            price: '640000',
             priceCurrency: 'VND',
             availability: 'https://schema.org/InStock',
             validFrom: '2026-01-01',
@@ -254,7 +236,7 @@ export default function HotelSchema() {
         name: 'Các gói giá thuê phòng tại Every Inn như thế nào?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Every Inn cung cấp đa dạng gói linh hoạt: Combo 3 Giờ (từ 288.000đ), Combo 6 Giờ (từ 540.000đ), Gói Qua Đêm (21:00 - 09:00, từ 441.000đ) và Phòng Ngày (15:00 - 12:00 hôm sau, từ 531.000đ).',
+          text: 'Every Inn cung cấp đa dạng gói linh hoạt: Combo 3 Giờ (từ 288.000đ), Gói Qua Đêm (21:00 - 09:00, từ 468.000đ) và Phòng Ngày (15:00 - 12:00 hôm sau, từ 558.000đ).',
         },
       },
     ],

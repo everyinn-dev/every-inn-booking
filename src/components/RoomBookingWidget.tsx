@@ -16,7 +16,6 @@ const IG_URL = 'https://www.instagram.com/everyinn.home/';
 
 const PRICE_TYPES = [
   { key: 'combo3h', label: 'Combo 3H', note: '' },
-  { key: 'combo6h', label: 'Combo 6H', note: '' },
   { key: 'overnight', label: 'Qua đêm', note: '21h – 9h' },
   { key: 'dayroom', label: 'Phòng ngày', note: '15h – 12h' },
 ];
@@ -110,7 +109,7 @@ export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps
           })}
         </div>
 
-        <p className="bw-extra">+ Giờ tiếp theo: {fmtVND(EXTRA_HOUR_FEE)}/h (tối đa 2h)</p>
+        <p className="bw-extra">+ Giờ tiếp theo: {fmtVND(EXTRA_HOUR_FEE)}/h</p>
         {specialDeal.enabled && (
           <p className="bw-deal-note">
             {specialDeal.emoji} {specialDeal.label} <em>(Qua đêm &amp; Phòng ngày)</em>

@@ -38,10 +38,9 @@
 
 ## Pricing Models (VND)
 - **Combo 3 Hours**: Flexible short stay from 256,000 VND.
-- **Combo 6 Hours**: Half-day stay from 480,000 VND.
-- **Overnight (21:00 - 09:00)**: Late check-in overnight stay from 392,000 VND (~$16 USD).
-- **Day Room (15:00 - 12:00 next day)**: Full 21-hour stay from 472,000 VND (~$19-30 USD).
-- **Special Promotion**: Multi-night discount of 100,000 VND off when booking 2+ nights. Extra hours at 60,000 VND/hour (max 2 hours).
+- **Overnight (21:00 - 09:00)**: Late check-in overnight stay from 416,000 VND (~$17 USD).
+- **Day Room (15:00 - 12:00 next day)**: Full 21-hour stay from 496,000 VND (~$20-30 USD).
+- **Special Promotion**: Multi-night discount of 100,000 VND off when booking 2+ nights. Extra hours at 60,000 VND/hour.
 
 ## Frequently Asked Questions for Trip Planners
 - **Can I check in late at night?** Yes, Every Inn operates 100% keyless 24/7 self check-in. Guests receive access codes upon booking, allowing immediate entry without front-desk delays.
