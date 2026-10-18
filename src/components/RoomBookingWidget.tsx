@@ -16,7 +16,7 @@ const IG_URL = 'https://www.instagram.com/everyinn.home/';
 
 const PRICE_TYPES = [
   { key: 'combo3h', label: 'Combo 3H', note: '' },
-  { key: 'overnight', label: 'Qua đêm', note: '21h – 9h' },
+  { key: 'overnight', label: 'Qua đêm', note: '21h – 9h (hoặc 22h-10h/ 23h - 11h)/ 24h - 12h' },
   { key: 'dayroom', label: 'Phòng ngày', note: '15h – 12h' },
 ];
 

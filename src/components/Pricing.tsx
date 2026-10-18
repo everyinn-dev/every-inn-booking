@@ -9,7 +9,7 @@ const VI_DAYS_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 
 const PRICE_TYPES = [
   { key: 'combo3h', label: 'COMBO 3H', sub: '' },
-  { key: 'overnight', label: 'QUA ĐÊM', sub: '21h – 9h' },
+  { key: 'overnight', label: 'QUA ĐÊM', sub: '21h – 9h (hoặc 22h-10h/ 23h - 11h)/ 24h - 12h' },
   { key: 'dayroom', label: 'PHÒNG NGÀY', sub: '15h – 12h' },
 ];
 
