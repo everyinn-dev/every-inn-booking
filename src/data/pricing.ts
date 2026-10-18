@@ -13,20 +13,18 @@ export type RoomClassKey = 'haven' | 'signature';
 export const BASE_PRICES: Record<RoomClassKey, Record<string, number>> = {
   haven: {
     combo3h:   320_000, // Combo 3 giờ
-    combo6h:   600_000, // Combo 6 giờ
-    overnight: 490_000, // Qua đêm  (21:00 → 09:00 hôm sau)
-    dayroom:   590_000, // Phòng ngày (15:00 → 12:00 hôm sau)
+    overnight: 520_000, // Qua đêm  (21:00 → 09:00 hôm sau)
+    dayroom:   620_000, // Phòng ngày (15:00 → 12:00 hôm sau)
   },
   signature: {
     combo3h:   360_000,
-    combo6h:   640_000,
     overnight: 620_000,
     dayroom:   750_000,
   },
 };
 
 // Extra-hour add-on (applies to all rooms)
-export const EXTRA_HOUR_FEE = 60_000; // per hour, max 2 hours
+export const EXTRA_HOUR_FEE = 60_000; // per hour
 
 // ── PRICE MANAGER ──────────────────────────────────────────────────────────
 export const PRICE_MANAGER = {
@@ -50,13 +48,11 @@ export const PRICE_MANAGER = {
     manualPrices: {
       haven: {
         combo3h:   null as number | null,
-        combo6h:   null as number | null,
         overnight: null as number | null,
         dayroom:   null as number | null,
       },
       signature: {
         combo3h:   null as number | null,
-        combo6h:   null as number | null,
         overnight: null as number | null,
         dayroom:   null as number | null,
       },

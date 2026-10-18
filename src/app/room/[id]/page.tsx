@@ -33,7 +33,7 @@ export async function generateMetadata({
   }
 
   const title = `${room.name} | Every Inn – Nguyễn Công Hoan, P.Cầu Kiệu, TP.HCM`;
-  const description = `${room.name} – ${room.shortDesc} Căn hộ mini tự nhận phòng 24/7 gần sân bay Tân Sơn Nhất. Combo 3H, 6H, Qua đêm, Phòng ngày.`;
+  const description = `${room.name} – ${room.shortDesc} Căn hộ mini tự nhận phòng 24/7 gần sân bay Tân Sơn Nhất. Combo 3H, Qua đêm, Phòng ngày.`;
 
   return {
     title,
