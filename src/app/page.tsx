@@ -13,8 +13,8 @@ export default function Home() {
       <Hero />
       <Rooms />
       <Pricing />
-      {/* Loyalty lookup: Coming Soon teaser mode on production pending owner reward rules (D-02 / P-5). Set comingSoon={false} to re-enable. */}
-      <LoyaltyLookup comingSoon={true} />
+      {/* Loyalty lookup: interactive on dev, Coming Soon teaser mode on production pending owner reward rules (D-02 / P-5). */}
+      <LoyaltyLookup comingSoon={false} />
       <Location />
       <Footer />
     </>
