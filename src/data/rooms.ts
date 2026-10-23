@@ -48,6 +48,7 @@ export const ROOM_IMAGES = {
   ],
   r201: [
     'v1785587029/201_mwm5gt.jpg',
+    'v1792340373/IMG_4614_xz2ecx.jpg',
     'v1785586719/11_vvd21z.jpg',
     'v1785586718/12_zgaln2.jpg',
   ],
