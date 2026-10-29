@@ -30,11 +30,11 @@ export const EXTRA_HOUR_FEE = 60_000; // per hour
 export const PRICE_MANAGER = {
   promo: {
     enabled: true,
-    label: 'Ưu đãi tháng 10',
+    label: 'Ưu đãi tháng 11',
     badgeText: '-10% ~ -15%',
     days: [0, 1, 2, 3, 4, 5], // Chủ Nhật đến Thứ Sáu (Thứ 7 không áp dụng)
     startsOn: '2026-10-06' as string | null,
-    endsOn: '2026-10-16' as string | null,
+    endsOn: '2026-11-30' as string | null, // Gia hạn đến hết 30/11
     mode: 'percent_off' as 'percent_off' | 'percent_up' | 'manual' | 'none',
     percentValue: 10,
     percentByClass: {
@@ -45,6 +45,16 @@ export const PRICE_MANAGER = {
       haven: '-10%',
       signature: '-15%',
     } as Record<RoomClassKey, string>,
+    // Các ngày Lễ không áp dụng giảm giá (định dạng YYYY-MM-DD)
+    holidays: [
+      '2026-11-22',
+      '2026-11-23',
+      '2026-11-24',
+    ] as string[],
+    // Loại trừ giảm giá theo thứ: Thứ 6 (ngày 5) không áp dụng giảm giá phòng ngày ('dayroom')
+    dayExclusions: {
+      5: ['dayroom'],
+    } as Record<number, string[]>,
     manualPrices: {
       haven: {
         combo3h:   null as number | null,
@@ -65,6 +75,14 @@ export const PRICE_MANAGER = {
     appliesTo: ['overnight', 'dayroom'],
     minUnits: 2,
     flatOff: 100_000,
+    startsOn: '2026-10-06' as string | null,
+    endsOn: '2026-11-30' as string | null, // Gia hạn đến hết 30/11
+    // Các ngày Lễ không áp dụng giảm giá
+    holidays: [
+      '2026-11-22',
+      '2026-11-23',
+      '2026-11-24',
+    ] as string[],
   },
 };
 
@@ -76,13 +94,34 @@ export const fmtVND = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 
 export const getDayName = (date: Date) => VI_DAYS[date.getDay()];
 
+export const formatYMD = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export function isSpecialDealActive(date: Date = new Date()): boolean {
+  const { specialDeal } = PRICE_MANAGER;
+  if (!specialDeal.enabled) return false;
+  if (specialDeal.startsOn) {
+    const start = new Date(specialDeal.startsOn + 'T00:00:00+07:00');
+    if (date < start) return false;
+  }
+  if (specialDeal.endsOn) {
+    const expiry = new Date(specialDeal.endsOn + 'T23:59:59+07:00');
+    if (date > expiry) return false;
+  }
+  const ymd = formatYMD(date);
+  if (specialDeal.holidays && specialDeal.holidays.includes(ymd)) {
+    return false;
+  }
+  return true;
+}
+
 export interface EffectivePrices {
   isSale: boolean;
   prices: Record<string, number>;
   original: Record<string, number> | null;
   label: string;
   badgeText: string;
-  reason: 'promo' | 'manual_override' | 'base' | 'expired' | 'day_excluded';
+  reason: 'promo' | 'manual_override' | 'base' | 'expired' | 'day_excluded' | 'holiday_excluded';
 }
 
 export function getEffectivePrices(classKey: RoomClassKey, date: Date = new Date()): EffectivePrices {
@@ -107,40 +146,57 @@ export function getEffectivePrices(classKey: RoomClassKey, date: Date = new Date
     }
   }
 
+  const ymd = formatYMD(date);
+  if (promo.holidays && promo.holidays.includes(ymd)) {
+    return { isSale: false, prices: base, original: null, label: '', badgeText: '', reason: 'holiday_excluded' };
+  }
+
   if (!promo.days.includes(date.getDay())) {
     return { isSale: false, prices: base, original: null, label: '', badgeText: '', reason: 'day_excluded' };
   }
 
   const percent = promo.percentByClass?.[classKey] ?? promo.percentValue ?? 0;
+  const dayOfWeek = date.getDay();
+  const excludedTypesToday = promo.dayExclusions?.[dayOfWeek] ?? [];
   let promoPrice: Record<string, number> = {};
 
   if (promo.mode === 'percent_off') {
     const factor = 1 - percent / 100;
     promoPrice = Object.fromEntries(
-      Object.entries(base).map(([k, v]) => [k, Math.round(v * factor)])
+      Object.entries(base).map(([k, v]) => [
+        k,
+        excludedTypesToday.includes(k) ? v : Math.round(v * factor),
+      ])
     );
   } else if (promo.mode === 'percent_up') {
     const factor = 1 + percent / 100;
     promoPrice = Object.fromEntries(
-      Object.entries(base).map(([k, v]) => [k, Math.round(v * factor)])
+      Object.entries(base).map(([k, v]) => [
+        k,
+        excludedTypesToday.includes(k) ? v : Math.round(v * factor),
+      ])
     );
   } else if (promo.mode === 'manual') {
     const manual = (promo.manualPrices[classKey] as Record<string, number | null>) ?? {};
     promoPrice = Object.fromEntries(
-      Object.entries(base).map(([k, v]) => [k, manual[k] ?? v])
+      Object.entries(base).map(([k, v]) => [
+        k,
+        excludedTypesToday.includes(k) ? v : (manual[k] ?? v),
+      ])
     );
   }
 
   const hasChange = Object.entries(promoPrice).some(([k, v]) => v !== base[k]);
   const badgeText = promo.badgeTextByClass?.[classKey] ?? (percent > 0 ? `-${percent}%` : promo.badgeText);
+  const effectiveLabel = date.getMonth() === 9 ? 'Ưu đãi tháng 10' : promo.label;
 
   return {
     isSale: hasChange,
     prices: promoPrice,
     original: hasChange ? base : null,
-    label: promo.label,
+    label: effectiveLabel,
     badgeText: hasChange ? badgeText : '',
-    reason: 'promo',
+    reason: hasChange ? 'promo' : 'base',
   };
 }
 

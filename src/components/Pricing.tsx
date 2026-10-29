@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import { PRICE_MANAGER, EXTRA_HOUR_FEE, getEffectivePrices, getDayName, fmtVND } from '../data/pricing';
+import { PRICE_MANAGER, EXTRA_HOUR_FEE, getEffectivePrices, getDayName, fmtVND, isSpecialDealActive } from '../data/pricing';
 import { IgIcon } from './Icons';
 import CheckinDatePicker from './CheckinDatePicker';
 
@@ -20,17 +20,27 @@ function buildStatusBadge(date: Date) {
   const dayName = getDayName(date);
   const dayShort = VI_DAYS_SHORT[date.getDay()];
 
+  if (haven.reason === 'holiday_excluded' || signature.reason === 'holiday_excluded') {
+    return (
+      <div className="pc-status info">
+        <span>ℹ️ <strong>{dayName} ({dayShort})</strong> – Giá tiêu chuẩn (Ngày Lễ không áp dụng giảm giá)</span>
+      </div>
+    );
+  }
+
   if (haven.isSale || signature.isSale) {
     const badgeSummary =
       haven.badgeText && signature.badgeText && haven.badgeText !== signature.badgeText
         ? `Haven ${haven.badgeText}, Signature ${signature.badgeText}`
         : (haven.badgeText || signature.badgeText);
+    const isFriday = date.getDay() === 5;
 
     return (
       <div className="pc-status sale">
         <span className="pc-fire">🎉</span>
         <span>
-          <strong>{dayName} ({dayShort})</strong> – Đang áp dụng <strong>{promo.label} ({badgeSummary})</strong>
+          <strong>{dayName} ({dayShort})</strong> – Đang áp dụng <strong>{haven.label || promo.label} ({badgeSummary})</strong>
+          {isFriday && ' (Thứ 6 không áp dụng giảm giá phòng ngày)'}
         </span>
       </div>
     );
@@ -71,7 +81,7 @@ function PriceRow({ classKey, className, date }: { classKey: 'haven' | 'signatur
         const diff = orig && orig !== p;
 
         return (
-          <td key={key} className={`pc-cell ${result.isSale ? 'is-sale' : ''}`}>
+          <td key={key} className={`pc-cell ${diff ? 'is-sale' : ''}`}>
             {diff && <span className="pc-orig">{fmtVND(orig)}</span>}
             <span className="pc-price">{fmtVND(p)}</span>
             {diff && <span className="pc-badge">{result.badgeText}</span>}
@@ -131,7 +141,10 @@ export default function Pricing() {
 
           <div className="pc-notes">
             <p>+ Giờ tiếp theo: {fmtVND(EXTRA_HOUR_FEE)}/h</p>
-            {specialDeal.enabled && (
+            <p>
+              ℹ️ Ưu đãi áp dụng CN – T6 (Thứ 7 &amp; các ngày Lễ 22, 23, 24/11 áp dụng giá tiêu chuẩn; Thứ 6 phòng ngày giá tiêu chuẩn).
+            </p>
+            {specialDeal.enabled && isSpecialDealActive(date) && (
               <p className="pc-deal">
                 {specialDeal.emoji} {specialDeal.label} <em>(áp dụng Qua đêm &amp; Phòng ngày)</em>
               </p>

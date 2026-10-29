@@ -8,6 +8,7 @@ import {
   getEffectivePrices,
   getDayName,
   fmtVND,
+  isSpecialDealActive,
 } from '../data/pricing';
 import { IgIcon } from './Icons';
 import CheckinDatePicker from './CheckinDatePicker';
@@ -67,6 +68,11 @@ export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps
           result.isSale ? (
             <div className="bw-status sale">
               🎉 {result.label} {result.badgeText} ({isToday ? 'Hôm nay – ' : ''}{dayName})
+              {date.getDay() === 5 && ' · T6 phòng ngày giá tiêu chuẩn'}
+            </div>
+          ) : result.reason === 'holiday_excluded' ? (
+            <div className="bw-status neutral">
+              ℹ️ Giá tiêu chuẩn – {isToday ? 'Hôm nay (' + dayShort + ')' : `${dayName} (${dayShort})`} (Ngày Lễ không áp dụng giảm giá)
             </div>
           ) : result.reason === 'day_excluded' ? (
             <div className="bw-status neutral">
@@ -86,7 +92,7 @@ export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps
             const p = result.prices[key];
             const orig = result.original?.[key];
             const diff = orig && orig !== p;
-            const isSpecial = specialDeal.enabled && specialDeal.appliesTo.includes(key);
+            const isSpecial = isSpecialDealActive(date) && specialDeal.appliesTo.includes(key);
 
             return (
               <div key={key} className="bw-price-row">
@@ -110,7 +116,7 @@ export default function RoomBookingWidget({ priceClass }: RoomBookingWidgetProps
         </div>
 
         <p className="bw-extra">+ Giờ tiếp theo: {fmtVND(EXTRA_HOUR_FEE)}/h</p>
-        {specialDeal.enabled && (
+        {specialDeal.enabled && isSpecialDealActive(date) && (
           <p className="bw-deal-note">
             {specialDeal.emoji} {specialDeal.label} <em>(Qua đêm &amp; Phòng ngày)</em>
           </p>
