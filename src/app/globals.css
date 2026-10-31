@@ -751,7 +751,8 @@ ul {
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
 }
 
-.ab-picker-root.theme-light .ab-picker-card:focus-visible {
+.ab-picker-root.theme-light .ab-picker-card:focus-visible,
+.ab-picker-root.theme-light .ab-picker-card:focus-within {
   border-color: #222222;
   box-shadow: 0 0 0 2px rgba(34, 34, 34, 0.15);
 }
@@ -805,7 +806,8 @@ ul {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
-.ab-picker-root.theme-dark .ab-picker-card:focus-visible {
+.ab-picker-root.theme-dark .ab-picker-card:focus-visible,
+.ab-picker-root.theme-dark .ab-picker-card:focus-within {
   border-color: var(--c-accent);
   box-shadow: 0 0 0 2px rgba(196, 161, 115, 0.35);
 }
@@ -852,6 +854,7 @@ ul {
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  pointer-events: none;
 }
 
 .ab-picker-micro-label {
@@ -894,6 +897,7 @@ ul {
   border-radius: 8px;
   flex-shrink: 0;
   transition: transform 0.2s ease;
+  pointer-events: none;
 }
 
 .ab-picker-card:hover .ab-picker-icon-box {
@@ -906,10 +910,25 @@ ul {
   width: 100%;
   height: 100%;
   opacity: 0;
-  pointer-events: none;
+  cursor: pointer;
+  z-index: 2;
   border: 0;
   margin: 0;
   padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+  background: transparent;
+  border-radius: inherit;
+}
+
+.ab-picker-native-input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .ab-picker-shortcuts {
