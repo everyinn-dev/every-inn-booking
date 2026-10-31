@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useId, useState, useEffect } from 'react';
+import React, { useRef, useId, useSyncExternalStore } from 'react';
 import { CalendarIcon } from './Icons';
 
 interface CheckinDatePickerProps {
@@ -23,6 +23,8 @@ const isSameDate = (a: Date, b: Date) =>
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
 
+const emptySubscribe = () => () => {};
+
 export default function CheckinDatePicker({
   id: customId,
   selectedDate,
@@ -35,11 +37,12 @@ export default function CheckinDatePicker({
   const autoId = useId();
   const inputId = customId || `checkin-date-${autoId}`;
   const inputRef = useRef<HTMLInputElement>(null);
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const isClient = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
   const now = new Date();
   const todayStr = formatYMD(now);
@@ -64,20 +67,6 @@ export default function CheckinDatePicker({
   const yyyy = selectedDate.getFullYear();
   const displayFormatted = `${dayName}, ${dd}/${mm}/${yyyy}`;
 
-  const handleContainerClick = () => {
-    if (inputRef.current) {
-      if ('showPicker' in HTMLInputElement.prototype) {
-        try {
-          inputRef.current.showPicker();
-        } catch {
-          inputRef.current.focus();
-        }
-      } else {
-        inputRef.current.focus();
-      }
-    }
-  };
-
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (!val) {
@@ -88,30 +77,43 @@ export default function CheckinDatePicker({
     onChange(new Date(y, m - 1, d));
   };
 
+  const handleInputClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    // Trên desktop browsers (Chrome, Edge, Firefox, macOS Safari), gọi showPicker() khi click trực tiếp
+    if (typeof e.currentTarget.showPicker === 'function') {
+      try {
+        e.currentTarget.showPicker();
+      } catch {
+        // Fallback tự nhiên nếu browser chặn hoặc không hỗ trợ
+      }
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === 'Enter' || e.key === ' ') && typeof e.currentTarget.showPicker === 'function') {
+      try {
+        e.currentTarget.showPicker();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
   const selectPreset = (d: Date) => {
     onChange(d);
   };
 
   return (
     <div className={`ab-picker-root ${theme === 'dark' ? 'theme-dark' : 'theme-light'} ${className}`}>
-      <div
+      <label
+        htmlFor={inputId}
         className="ab-picker-card"
-        onClick={handleContainerClick}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleContainerClick();
-          }
-        }}
-        aria-label={`Chọn ngày nhận phòng, ngày hiện tại là ${displayFormatted}`}
+        title="Nhấn để chọn ngày nhận phòng"
       >
         <div className="ab-picker-content">
           <span className="ab-picker-micro-label">{label}</span>
           <div className="ab-picker-value-wrap" suppressHydrationWarning>
             <span className="ab-picker-value">{displayFormatted}</span>
-            {mounted && (
+            {isClient && (
               <>
                 {isToday && <span className="ab-picker-pill is-today">Hôm nay</span>}
                 {isTomorrow && <span className="ab-picker-pill is-tomorrow">Ngày mai</span>}
@@ -124,7 +126,7 @@ export default function CheckinDatePicker({
           <CalendarIcon size={18} />
         </div>
 
-        {/* Hidden accessible native picker */}
+        {/* Native picker overlay - handles real physical tap directly on iOS Safari & Android, plus desktop */}
         <input
           ref={inputRef}
           type="date"
@@ -133,10 +135,11 @@ export default function CheckinDatePicker({
           min={todayStr}
           className="ab-picker-native-input"
           onChange={handleDateChange}
-          tabIndex={-1}
-          aria-hidden="true"
+          onClick={handleInputClick}
+          onKeyDown={handleKeyDown}
+          aria-label={`Chọn ngày nhận phòng, ngày hiện tại là ${displayFormatted}`}
         />
-      </div>
+      </label>
 
       {showShortcuts && (
         <div className="ab-picker-shortcuts" role="toolbar" aria-label="Phím tắt chọn ngày nhanh">
