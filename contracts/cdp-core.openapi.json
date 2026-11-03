@@ -78,7 +78,7 @@
       "post": {
         "operationId": "getLoyaltyContext",
         "summary": "Tier snapshot + ADVISORY next-accrual preview for quotes. The authoritative reward is the accrual result.",
-        "x-callers": ["booking-core", "admin-bff"],
+        "x-callers": ["booking-core", "admin-bff", "agent-core"],
         "parameters": [{ "$ref": "#/components/parameters/Caller" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoyaltyContextRequest" } } } },
         "responses": {
@@ -90,8 +90,8 @@
     "/internal/v1/customers/lookup": {
       "post": {
         "operationId": "lookupCustomer",
-        "summary": "Full customer profile by phone for authorized staff (Admin BFF) or Booking Core.",
-        "x-callers": ["admin-bff", "booking-core"],
+        "summary": "Full customer profile by phone for authorized staff (Admin BFF), Booking Core or the AI receptionist (agent-core strips internalNotes before any LLM use).",
+        "x-callers": ["admin-bff", "booking-core", "agent-core"],
         "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/ActorId" }, { "$ref": "#/components/parameters/ActorRole" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PhoneRequest" } } } },
         "responses": {
@@ -158,7 +158,7 @@
   },
   "components": {
     "parameters": {
-      "Caller": { "name": "X-EI-Caller", "in": "header", "required": true, "schema": { "type": "string", "enum": ["admin-bff", "booking-core", "landing-bff"] } },
+      "Caller": { "name": "X-EI-Caller", "in": "header", "required": true, "schema": { "type": "string", "enum": ["admin-bff", "booking-core", "landing-bff", "agent-core"] } },
       "RequestId": { "name": "X-Request-Id", "in": "header", "required": false, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{8,80}$" } },
       "CorrelationId": { "name": "X-Correlation-Id", "in": "header", "required": false, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{8,80}$" } },
       "ActorId": { "name": "X-EI-Actor-Id", "in": "header", "required": false, "schema": { "type": "string", "pattern": "^\\d{1,12}$" } },
