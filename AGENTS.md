@@ -4,6 +4,8 @@
 > Deploy state, Cloudflare resource IDs, the Phase 1 task board and open owner decisions live **only** there.
 > This Landing app owns the loyalty lookup BFF (`src/app/api/loyalty/check`) which calls CDP Core via the `CDP_CORE` Service Binding.
 > Update the status file before ending any session that changes anything.
+> **Rules & skills:** [`../everyinn-platform-docs/CONVENTIONS.md`](../everyinn-platform-docs/CONVENTIONS.md) · [`../everyinn-platform-docs/AGENT_INDEX.md`](../everyinn-platform-docs/AGENT_INDEX.md). `.agents/skills` and `.agents/rules` here are **copies** synced by `everyinn-platform-docs/scripts/sync-skills.mjs` — edit them only in the docs repo.
+> **Known data drift (owner-confirmed 2026-11-03):** Signature rooms are **24 m²**, Haven **16 m²** (fixed in `src/data/rooms.ts`, task `L-1`).
 
 ## Cloudflare Workers Development Guidelines
 

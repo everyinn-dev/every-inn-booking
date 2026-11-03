@@ -112,7 +112,7 @@ export default function HotelSchema() {
         '@type': 'HotelRoom',
         name: 'Haven Class (Phòng 101, 201, 301)',
         description:
-          'Căn hộ mini 20m², giường đôi Queen, tự nhận phòng 24/7 bằng mã khóa thông minh, gần sân bay Tân Sơn Nhất.',
+          'Căn hộ mini 16m², giường đôi Queen, tự nhận phòng 24/7 bằng mã khóa thông minh, gần sân bay Tân Sơn Nhất.',
         occupancy: {
           '@type': 'QuantitativeValue',
           value: 2,
@@ -120,7 +120,7 @@ export default function HotelSchema() {
         },
         floorSize: {
           '@type': 'QuantitativeValue',
-          value: 20,
+          value: 16,
           unitCode: 'MTK',
         },
         bed: {
@@ -162,7 +162,7 @@ export default function HotelSchema() {
         '@type': 'HotelRoom',
         name: 'Signature Class (Phòng 102, 202, 302)',
         description:
-          'Căn hộ mini 28-30m², hai mặt cửa sổ thoáng sáng, giường đôi nệm cao cấp, tự nhận phòng 24/7.',
+          'Căn hộ mini 24m², hai mặt cửa sổ thoáng sáng, giường đôi nệm cao cấp, tự nhận phòng 24/7.',
         occupancy: {
           '@type': 'QuantitativeValue',
           value: 2,
@@ -170,7 +170,7 @@ export default function HotelSchema() {
         },
         floorSize: {
           '@type': 'QuantitativeValue',
-          value: 30,
+          value: 24,
           unitCode: 'MTK',
         },
         bed: {
