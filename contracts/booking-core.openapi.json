@@ -456,7 +456,113 @@
           "releasedAt": { "$ref": "#/components/schemas/NullableInstant" },
           "releasedBy": { "$ref": "#/components/schemas/StaffRef" },
           "releaseReason": { "$ref": "#/components/schemas/NullableString" },
+          "blockType": { "description": "LSB-6: why the room is closed (0011; legacy rows = maintenance).", "$ref": "#/components/schemas/BlockType" },
           "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "BlockType": { "enum": ["stop_sell", "maintenance", "owner_stay", "deep_cleaning"] },
+      "CalendarRatePlan": { "enum": ["combo3h", "overnight", "dayroom"] },
+      "CalendarRate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["price", "listPrice", "override"],
+        "properties": {
+          "price": { "type": ["integer", "null"], "description": "Effective base price for the date (override or list)." },
+          "listPrice": { "type": ["integer", "null"] },
+          "override": {
+            "oneOf": [
+              { "type": "null" },
+              { "type": "object", "additionalProperties": false, "required": ["id", "scope", "note"], "properties": { "id": { "type": "string" }, "scope": { "enum": ["room", "class"] }, "note": { "$ref": "#/components/schemas/NullableString" } } }
+            ]
+          }
+        }
+      },
+      "CalendarMatrix": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "today", "bookingWindow", "ratePlans", "blockTypes", "rooms"],
+        "properties": {
+          "from": { "$ref": "#/components/schemas/BusinessDate" },
+          "to": { "$ref": "#/components/schemas/BusinessDate" },
+          "today": { "$ref": "#/components/schemas/BusinessDate" },
+          "bookingWindow": { "type": "object", "additionalProperties": false, "required": ["maxAdvanceDays", "maxDate"], "properties": { "maxAdvanceDays": { "type": "integer" }, "maxDate": { "$ref": "#/components/schemas/BusinessDate" } } },
+          "ratePlans": { "type": "array", "items": { "$ref": "#/components/schemas/CalendarRatePlan" } },
+          "blockTypes": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["code", "label"], "properties": { "code": { "$ref": "#/components/schemas/BlockType" }, "label": { "type": "string" } } } },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "name", "roomNumber", "roomClass", "days"],
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "roomNumber": { "type": "string" },
+                "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+                "days": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["date", "bookable", "rates", "closures", "bookings", "holds", "occupancyPct"],
+                    "properties": {
+                      "date": { "$ref": "#/components/schemas/BusinessDate" },
+                      "bookable": { "type": "boolean", "description": "today ≤ date ≤ booking window (web guests)." },
+                      "rates": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/CalendarRate" } },
+                      "closures": {
+                        "type": "array",
+                        "items": { "type": "object", "additionalProperties": false, "required": ["id", "blockType", "reason", "from", "to", "version"], "properties": { "id": { "type": "string" }, "blockType": { "$ref": "#/components/schemas/BlockType" }, "reason": { "type": "string" }, "from": { "$ref": "#/components/schemas/Instant" }, "to": { "$ref": "#/components/schemas/Instant" }, "version": { "type": "integer" } } }
+                      },
+                      "bookings": { "type": "integer" },
+                      "holds": { "type": "integer" },
+                      "occupancyPct": { "type": "integer", "minimum": 0, "maximum": 100 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateOverrideScope": {
+        "type": "object",
+        "required": ["roomClass", "fromDate", "toDate"],
+        "properties": {
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "roomId": { "type": ["string", "null"], "description": "null = every room of roomClass; a room override wins over the class one." },
+          "ratePlanCodes": { "type": "array", "items": { "$ref": "#/components/schemas/CalendarRatePlan" } },
+          "ratePlanCode": { "$ref": "#/components/schemas/CalendarRatePlan" },
+          "fromDate": { "$ref": "#/components/schemas/BusinessDate" },
+          "toDate": { "$ref": "#/components/schemas/BusinessDate" },
+          "weekdays": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 6 }, "description": "0 = Sunday … 6 = Saturday; omitted = every day." }
+        }
+      },
+      "RateOverride": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "roomId", "roomClass", "ratePlanCode", "date", "customBasePrice", "note", "version", "updatedBy", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "roomId": { "type": ["string", "null"] },
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "ratePlanCode": { "$ref": "#/components/schemas/CalendarRatePlan" },
+          "date": { "$ref": "#/components/schemas/BusinessDate" },
+          "customBasePrice": { "$ref": "#/components/schemas/Vnd" },
+          "note": { "$ref": "#/components/schemas/NullableString" },
+          "version": { "type": "integer" },
+          "updatedBy": { "$ref": "#/components/schemas/NullableString" },
+          "updatedAt": { "$ref": "#/components/schemas/Instant" }
+        }
+      },
+      "BulkBlocksResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["blocks", "skipped", "batchId", "replayed"],
+        "properties": {
+          "blocks": { "type": "array", "items": { "$ref": "#/components/schemas/Block" } },
+          "skipped": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["roomId", "roomName", "message"], "properties": { "roomId": { "type": "string" }, "roomName": { "type": "string" }, "message": { "type": "string" } } } },
+          "batchId": { "type": "string" },
+          "replayed": { "type": "boolean" }
         }
       },
       "BlockEnvelope": {
@@ -2285,13 +2391,107 @@
                   "blockedFrom": { "$ref": "#/components/schemas/Instant" },
                   "blockedTo": { "$ref": "#/components/schemas/Instant" },
                   "reason": { "type": "string" },
-                  "note": { "type": "string" }
+                  "note": { "type": "string" },
+                  "blockType": { "$ref": "#/components/schemas/BlockType" }
                 }
               }
             }
           }
         },
         "responses": { "201": { "$ref": "#/components/responses/Block" }, "200": { "$ref": "#/components/responses/Block" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/room-blocks/bulk": {
+      "post": {
+        "operationId": "bulkCreateBlocks",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "x-idempotency": "required",
+        "summary": "LSB-6: close many rooms (or ['*']) in ONE batch, one block per room. 409 ROOM_UNAVAILABLE with details.skipped when a room is booked, unless skipConflicts=true (then only free rooms are closed). ≤ 31 days per call.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["roomIds", "blockType", "blockedFrom", "blockedTo"],
+                "properties": {
+                  "roomIds": { "type": "array", "items": { "type": "string" } },
+                  "blockType": { "$ref": "#/components/schemas/BlockType" },
+                  "blockedFrom": { "$ref": "#/components/schemas/Instant" },
+                  "blockedTo": { "$ref": "#/components/schemas/Instant" },
+                  "reason": { "type": "string" },
+                  "note": { "type": "string" },
+                  "skipConflicts": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Blocks created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BulkBlocksResult" } } } },
+          "200": { "description": "Replay", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BulkBlocksResult" } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/calendar/matrix": {
+      "get": {
+        "operationId": "calendarMatrix",
+        "x-callers": ["admin-bff"],
+        "summary": "LSB-6: room × date grid (≤ 62 days): effective base price per plan (override scope), closures, bookings / holds, occupancy %. Weak ETag over bookings + catalog versions.",
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/BusinessDate" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/BusinessDate" } },
+          { "name": "If-None-Match", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Matrix", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CalendarMatrix" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/rate-overrides": {
+      "get": {
+        "operationId": "listRateOverrides",
+        "x-callers": ["admin-bff"],
+        "parameters": [
+          { "name": "from", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/BusinessDate" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "$ref": "#/components/schemas/BusinessDate" } }
+        ],
+        "responses": {
+          "200": { "description": "Active overrides", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["overrides"], "properties": { "overrides": { "type": "array", "items": { "$ref": "#/components/schemas/RateOverride" } } } } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "put": {
+        "operationId": "setRateOverrides",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "LSB-6: custom base price for a date range (upsert per scope × plan × date, one batch, audited, bumps catalog). Promotions / vouchers / stamps stack on it like on the list price.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/RateOverrideScope" }, { "type": "object", "required": ["customBasePrice"], "properties": { "customBasePrice": { "$ref": "#/components/schemas/Vnd" }, "note": { "type": "string" } } }] } } }
+        },
+        "responses": {
+          "200": { "description": "Summary", "content": { "application/json": { "schema": { "type": "object", "required": ["updated"], "properties": { "updated": { "type": "integer" } } } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/rate-overrides/clear": {
+      "post": {
+        "operationId": "clearRateOverrides",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "LSB-6: back to the list price for a date range (rows kept with is_active = 0, audited).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RateOverrideScope" } } } },
+        "responses": {
+          "200": { "description": "Summary", "content": { "application/json": { "schema": { "type": "object", "required": ["cleared"], "properties": { "cleared": { "type": "integer" } } } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
       }
     },
     "/internal/v1/room-blocks/{blockId}": {
