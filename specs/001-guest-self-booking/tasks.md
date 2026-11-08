@@ -8,6 +8,25 @@
 
 ---
 
+## Progress & Bug Log (implementation, 2026-11-08)
+
+The phases below are the original spec-kit breakdown. What was actually built, and where it deliberately differs
+(IDs, migrations 0010/0011/0021/0004, session engine in agent-core, voucher wallet, admin on the same engine), is in
+`everyinn-platform-docs/EI_LANDING_SELF_BOOKING_SPEC.md` §9 and `EI_PHASE1_STATUS.md` §4.6 (`LSB-*`).
+
+| Phase | Status | Where |
+|---|---|---|
+| 1 Setup & contracts | done | contracts synced (booking-core, agent-landing); shared booking-kit |
+| 2 Core extensions | done | booking-core 0010 / 0011, cdp-core 0004, agent-core 0021 |
+| 3–6 US1–US5 (search, hold, VietQR + Telegram, /checkin) | done | landing `1a4ed5c`; agent-core `3c74659` |
+| 7 US6 OTA calendar | done | booking-core `e171488`, admin `21fb26e` |
+| 8 Polish & E2E | partly | probe fixes at 375 / 430 px done; UAT E2E after push to `dev` (LSB-8); check-in media = LSB-7 (owner) |
+
+Bugs / notes found while building:
+- Busy-card contrast, tab contrast, "Áp dụng" wrapping, placeholder contrast, summary order on mobile, guide text overflow — fixed (probe).
+- Pre-existing, out of scope: header Instagram gold link contrast and small footer tap targets on the landing.
+- Pre-existing time-of-day agent-core tests (brain-flow OD-5(a), BUG-27) fail at some hours on `dev` too.
+
 ## Phase 1: Setup & Cross-Service Contracts (Shared Infrastructure)
 
 **Purpose**: Cập nhật cấu hình Service Bindings, định danh Caller `landing-bff`, module Rate Limiter theo IP và đồng bộ kiểu dữ liệu giữa các repo.
