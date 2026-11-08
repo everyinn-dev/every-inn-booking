@@ -38,8 +38,20 @@
 	},
         "upload_source_maps": false,
 	// Production CDP_CORE binding (Phase 1.5, P-3 / S6).
+	// LSB-3 guest self-booking: BOOKING_CORE (read-only storefront, caller landing-bff) + AGENT_CORE entrypoint
+	// LandingApi (booking sessions, /checkin). Prod keeps WEB_BOOKING_ENABLED=false until the owner approves (R6).
 	"services": [
-		{ "binding": "CDP_CORE", "service": "everyinn-cdp-core" }
+		{ "binding": "CDP_CORE", "service": "everyinn-cdp-core" },
+		{ "binding": "BOOKING_CORE", "service": "everyinn-booking-core" },
+		{ "binding": "AGENT_CORE", "service": "everyinn-agent-core", "entrypoint": "LandingApi" }
+	],
+	"vars": { "WEB_BOOKING_ENABLED": "false" },
+	// Workers Rate Limiting (per IP, short windows; long windows live in agent-core D1 — D4)
+	"ratelimits": [
+		{ "name": "SEARCH_RL", "namespace_id": "4101", "simple": { "limit": 30, "period": 60 } },
+		{ "name": "HOLD_RL", "namespace_id": "4102", "simple": { "limit": 3, "period": 60 } },
+		{ "name": "PAID_RL", "namespace_id": "4103", "simple": { "limit": 5, "period": 60 } },
+		{ "name": "LOOKUP_RL", "namespace_id": "4104", "simple": { "limit": 5, "period": 60 } }
 	],
 	"env": {
 		"dev": {
@@ -47,7 +59,18 @@
 			"main": ".open-next/worker.js",
 			"preview_urls": false,
 			"assets": { "binding": "ASSETS", "directory": ".open-next/assets" },
-			"services": [{ "binding": "CDP_CORE", "service": "everyinn-cdp-core-dev" }],
+			"services": [
+				{ "binding": "CDP_CORE", "service": "everyinn-cdp-core-dev" },
+				{ "binding": "BOOKING_CORE", "service": "everyinn-booking-core-dev" },
+				{ "binding": "AGENT_CORE", "service": "everyinn-agent-core-dev", "entrypoint": "LandingApi" }
+			],
+			"vars": { "WEB_BOOKING_ENABLED": "true" },
+			"ratelimits": [
+				{ "name": "SEARCH_RL", "namespace_id": "4201", "simple": { "limit": 30, "period": 60 } },
+				{ "name": "HOLD_RL", "namespace_id": "4202", "simple": { "limit": 3, "period": 60 } },
+				{ "name": "PAID_RL", "namespace_id": "4203", "simple": { "limit": 5, "period": 60 } },
+				{ "name": "LOOKUP_RL", "namespace_id": "4204", "simple": { "limit": 5, "period": 60 } }
+			],
 			"observability": { "enabled": true, "head_sampling_rate": 1 }
 		}
 	}

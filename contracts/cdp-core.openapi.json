@@ -154,6 +154,51 @@
           "503": { "$ref": "#/components/responses/Error" }
         }
       }
+    },
+    "/internal/v1/vouchers/reserve": {
+      "post": {
+        "operationId": "reserveVoucher",
+        "x-callers": ["booking-core"],
+        "summary": "LSB-1b: lease one wallet voucher to a Booking Core hold (compare-and-set; 409 VOUCHER_NOT_AVAILABLE).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone", "holdId", "until"],
+                "properties": { "phone": { "type": "string" }, "voucherId": { "type": "string" }, "code": { "type": "string" }, "holdId": { "type": "string" }, "until": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Leased voucher",
+            "content": {
+              "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["voucher"], "properties": { "voucher": { "$ref": "#/components/schemas/Voucher" } } } }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/vouchers/release": {
+      "post": {
+        "operationId": "releaseVoucher",
+        "x-callers": ["booking-core"],
+        "summary": "LSB-1b: give back every voucher leased to a hold (idempotent).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["holdId"], "properties": { "holdId": { "type": "string" } } } } } },
+        "responses": {
+          "200": {
+            "description": "Released count",
+            "content": {
+              "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["released"], "properties": { "released": { "type": "integer", "minimum": 0 } } } }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
     }
   },
   "components": {
@@ -216,7 +261,13 @@
         "type": "object",
         "additionalProperties": false,
         "required": ["step", "label", "status"],
-        "properties": { "step": { "type": "integer" }, "label": { "type": "string" }, "status": { "type": "string", "enum": ["reached", "upcoming"] } }
+        "properties": {
+          "step": { "type": "integer" },
+          "label": { "type": "string" },
+          "status": { "type": "string", "enum": ["reached", "upcoming"] },
+          "voucherPromotionId": { "type": ["string", "null"] },
+          "voucherValidDays": { "type": "integer", "minimum": 1 }
+        }
       },
       "PublicStamp": {
         "type": "object",
@@ -263,7 +314,9 @@
             "type": "object",
             "properties": { "fullName": { "type": "string", "maxLength": 120 }, "instagram": { "type": "string", "maxLength": 120 }, "facebook": { "type": "string", "maxLength": 200 }, "zalo": { "type": "string", "maxLength": 120 } }
           },
-          "roomClass": { "type": "string", "maxLength": 32 }
+          "roomClass": { "type": "string", "maxLength": 32 },
+          "channel": { "type": "string", "maxLength": 16, "description": "LSB-1b booking-session channel (web/admin → milestone rewards become wallet vouchers)" },
+          "voucherCode": { "type": "string", "maxLength": 40, "description": "LSB-1b wallet voucher redeemed by this booking" }
         }
       },
       "Reward": {
@@ -274,7 +327,10 @@
           "milestoneStep": { "type": "integer" },
           "rewardType": { "const": "fixed_discount" },
           "rewardValue": { "type": "integer", "minimum": 0, "description": "VND" },
-          "label": { "type": "string" }
+          "label": { "type": "string" },
+          "deliveredAs": { "enum": ["discount", "voucher"], "description": "LSB-1b: voucher = issued into the wallet for a later stay" },
+          "voucherCode": { "type": ["string", "null"] },
+          "voucherExpiresAt": { "type": ["string", "null"] }
         }
       },
       "AccrualResult": {
@@ -358,7 +414,7 @@
       "LoyaltyContext": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["found", "customerId", "tier", "lifetimeBookingCount", "rulesVersion", "nextAccrualPreview", "advisory"],
+        "required": ["found", "customerId", "tier", "lifetimeBookingCount", "rulesVersion", "nextAccrualPreview", "advisory", "vouchers"],
         "properties": {
           "found": { "type": "boolean" },
           "customerId": { "type": ["string", "null"] },
@@ -377,7 +433,8 @@
               "reward": { "$ref": "#/components/schemas/Reward" },
               "tierAfter": { "$ref": "#/components/schemas/Tier" }
             }
-          }
+          },
+          "vouchers": { "type": "array", "items": { "$ref": "#/components/schemas/Voucher" }, "description": "LSB-1b usable wallet vouchers" }
         }
       },
       "AdminStamp": {
@@ -475,7 +532,7 @@
       "LoyaltyDetail": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["customer", "cycles", "stampEntries"],
+        "required": ["customer", "cycles", "stampEntries", "vouchers"],
         "properties": {
           "customer": { "$ref": "#/components/schemas/AdminCustomer" },
           "cycles": {
@@ -515,6 +572,25 @@
                   "properties": { "rewardType": { "const": "fixed_discount" }, "rewardValue": { "type": "integer" }, "label": { "type": "string" } }
                 },
                 "source": { "type": "string", "enum": ["runtime", "legacy_backfill"] }
+              }
+            }
+          },
+          "vouchers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "code", "value", "label", "status", "earnedByBookingId", "redeemedBookingId", "expiresAt", "createdAt"],
+              "properties": {
+                "id": { "type": "string" },
+                "code": { "type": "string" },
+                "value": { "type": "integer" },
+                "label": { "type": "string" },
+                "status": { "enum": ["issued", "reserved", "redeemed", "void"] },
+                "earnedByBookingId": { "type": ["string", "null"] },
+                "redeemedBookingId": { "type": ["string", "null"] },
+                "expiresAt": { "type": "string" },
+                "createdAt": { "type": "string" }
               }
             }
           }
@@ -558,6 +634,21 @@
               }
             }
           }
+        }
+      },
+      "Voucher": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "code", "codeMasked", "value", "label", "promotionId", "status", "expiresAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "code": { "type": "string" },
+          "codeMasked": { "type": "string" },
+          "value": { "type": "integer", "minimum": 0 },
+          "label": { "type": "string" },
+          "promotionId": { "type": ["string", "null"] },
+          "status": { "enum": ["issued", "reserved"] },
+          "expiresAt": { "type": "string" }
         }
       }
     }

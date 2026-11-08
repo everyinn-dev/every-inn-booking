@@ -1,0 +1,2481 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Every Inn Booking Core — internal API",
+    "version": "booking-internal-v1",
+    "description": "Provider-owned contract of everyinn-booking-core (EI-OTA-ARCH-001 Phase 1). Internal-only: reachable exclusively through Service Bindings (no workers.dev, no Preview URLs, no routes). Every operation requires an X-EI-Caller listed in its x-callers (admin-bff everywhere; agent-core on a documented subset, ADR-013) plus the staff actor headers (Admin forwards the logged-in staff; agent-core uses bot actor 900001/receptionist, or the approving staff member for confirmations). Money is integer VND, instants are UTC ISO-8601, business dates are Asia/Ho_Chi_Minh. Responses are `Cache-Control: private, no-store`. Errors: { error: { code, message, request_id, details? } }."
+  },
+  "servers": [{ "url": "https://everyinn-booking-core.internal", "description": "Service Binding (env.BOOKING.fetch) — not a public host" }],
+  "x-callers-legend": {
+    "admin-bff": "Admin BFF (everyinn-admin) — every operation",
+    "agent-core": "AI receptionist + booking-session engine (everyinn-agent-core, ADR-013 / LSB) — only operations whose x-callers list it; others return 403 FORBIDDEN_CALLER",
+    "landing-bff": "Public landing BFF (every-inn-booking, LSB-1) — read-only storefront routes only (storefront, inventory version, availability search, quotes, public promotions)"
+  },
+  "components": {
+    "parameters": {
+      "Caller": { "name": "X-EI-Caller", "in": "header", "required": true, "schema": { "enum": ["admin-bff", "agent-core"] } },
+      "ActorId": { "name": "X-EI-Actor-Id", "in": "header", "required": true, "schema": { "type": "string", "pattern": "^\\d{1,12}$" } },
+      "ActorRole": { "name": "X-EI-Actor-Role", "in": "header", "required": true, "schema": { "enum": ["manager", "receptionist"] } },
+      "ActorName": { "name": "X-EI-Actor-Name", "in": "header", "required": false, "schema": { "type": "string", "description": "encodeURIComponent(display name)" } },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{8,128}$" }, "description": "Scope = operation:caller:actor. Same key + same body → replay (200, replayed=true); same key + different body → 409 IDEMPOTENCY_KEY_REUSED. TTL 7 days." },
+      "BookingId": { "name": "bookingId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,64}$" } },
+      "HoldId": { "name": "holdId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" } },
+      "BlockId": { "name": "blockId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" } },
+      "EntryId": { "name": "entryId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" } },
+      "PromotionId": { "name": "promotionId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" } },
+      "CategoryId": { "name": "categoryId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" } },
+      "RateRuleId": { "name": "rateRuleId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" } },
+      "SurchargeRuleId": { "name": "surchargeRuleId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" } },
+      "ConfigKey": { "name": "configKey", "in": "path", "required": true, "schema": { "enum": ["booking_rules", "hourly_checkin_slots"] } },
+      "OutboxId": { "name": "outboxId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,120}$" } }
+    },
+    "responses": {
+      "Error": { "description": "Error (4xx/5xx)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotModified": { "description": "ETag matched (If-None-Match)" },
+      "Booking": { "description": "Booking (current state)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BookingEnvelope" } } } },
+      "Hold": { "description": "Room hold (15-minute checkout lock)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HoldEnvelope" } } } },
+      "Block": { "description": "Room block", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BlockEnvelope" } } } },
+      "Entry": { "description": "Financial entry + booking projection", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EntryEnvelope" } } } },
+      "Promotion": { "description": "Promotion", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PromotionEnvelope" } } } },
+      "Category": { "description": "Promotion category", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CategoryEnvelope" } } } },
+      "SurchargeRule": { "description": "Surcharge rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SurchargeRuleEnvelope" } } } }
+    },
+    "schemas": {
+      "Instant": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$" },
+      "NullableInstant": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$" },
+      "BusinessDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "NullableBusinessDate": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+      "Vnd": { "type": "integer" },
+      "NullableString": { "type": ["string", "null"] },
+      "RoomClass": { "enum": ["haven", "signature"] },
+      "BookingType": { "enum": ["hourly", "overnight", "dayuse", "custom"] },
+      "RatePlanCode": { "enum": ["combo3h", "combo6h", "overnight", "dayroom", "custom"] },
+      "BookingStatus": { "enum": ["pending", "confirmed", "cancelled", "no_show"] },
+      "LoyaltySyncStatus": { "enum": ["not_applicable", "pending", "synced"] },
+      "Tier": { "enum": ["not_member", "bronze", "silver", "gold"] },
+      "PaymentMethod": { "enum": ["cash", "bank_transfer", "card", "ewallet", "other"] },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message", "request_id"],
+            "properties": {
+              "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+              "message": { "type": "string" },
+              "request_id": { "type": "string" },
+              "details": { "type": "object" }
+            }
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "service", "contract", "env"],
+        "properties": {
+          "status": { "const": "ok" },
+          "service": { "const": "everyinn-booking-core" },
+          "contract": { "const": "booking-internal-v1" },
+          "env": { "enum": ["production", "dev"] }
+        }
+      },
+      "StaffRef": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["id", "name"],
+        "properties": { "id": { "type": "integer" }, "name": { "$ref": "#/components/schemas/NullableString" } }
+      },
+      "PriceLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "label", "amount"],
+        "properties": {
+          "code": { "enum": ["base", "holiday_surcharge", "extra_guest", "extra_hours", "incidental", "promotion", "loyalty_reward"] },
+          "label": { "type": "string" },
+          "amount": { "$ref": "#/components/schemas/Vnd" },
+          "quantity": { "type": "integer" },
+          "unitAmount": { "type": "number" },
+          "ref": { "type": "object" },
+          "advisory": { "type": "boolean" }
+        }
+      },
+      "NightlyBreakdownItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stayDate",
+          "baseRate",
+          "holidayRuleId",
+          "holidayRuleName",
+          "holidaySurchargePercent",
+          "holidaySurchargeAmount"
+        ],
+        "properties": {
+          "stayDate": { "$ref": "#/components/schemas/BusinessDate" },
+          "businessDate": { "$ref": "#/components/schemas/BusinessDate" },
+          "baseRate": { "$ref": "#/components/schemas/Vnd" },
+          "holidayRuleId": { "type": ["string", "null"] },
+          "holidayRuleName": { "type": ["string", "null"] },
+          "holidaySurchargePercent": { "type": "number" },
+          "holidaySurchargeAmount": { "$ref": "#/components/schemas/Vnd" },
+          "holidaySurcharge": { "$ref": "#/components/schemas/Vnd" },
+          "extraGuests": { "type": "integer" },
+          "extraGuestFee": { "$ref": "#/components/schemas/Vnd" }
+        }
+      },
+      "CappingWarning": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exceeded",
+          "currentSubtotal",
+          "suggestedBookingType",
+          "suggestedBasePrice",
+          "savingAmount",
+          "message"
+        ],
+        "properties": {
+          "exceeded": { "type": "boolean" },
+          "currentSubtotal": { "$ref": "#/components/schemas/Vnd" },
+          "suggestedBookingType": { "type": "string", "enum": ["overnight", "dayuse"] },
+          "suggestedRatePlanCode": { "type": "string", "enum": ["overnight", "dayroom"] },
+          "suggestedBasePrice": { "$ref": "#/components/schemas/Vnd" },
+          "currentPrice": { "$ref": "#/components/schemas/Vnd" },
+          "savingAmount": { "$ref": "#/components/schemas/Vnd" },
+          "message": { "type": "string" }
+        }
+      },
+      "SurchargeRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "propertyId",
+          "name",
+          "ruleType",
+          "calcMethod",
+          "amount",
+          "chargeUnit",
+          "startDate",
+          "endDate",
+          "applicableDaysOfWeek",
+          "applicableBookingTypes",
+          "applicableRoomClasses",
+          "priority",
+          "isActive",
+          "archivedAt",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "propertyId": { "type": "string" },
+          "name": { "type": "string" },
+          "ruleType": { "enum": ["holiday", "extra_guest", "custom_fee", "early_checkin", "late_checkout", "custom"] },
+          "calcMethod": { "enum": ["fixed_amount", "percentage"] },
+          "amount": { "type": "number", "minimum": 0 },
+          "chargeUnit": { "enum": ["per_night", "per_stay", "per_guest_night", "per_guest_stay"] },
+          "startDate": { "$ref": "#/components/schemas/NullableBusinessDate" },
+          "endDate": { "$ref": "#/components/schemas/NullableBusinessDate" },
+          "applicableDaysOfWeek": { "type": "array", "items": { "enum": [0, 1, 2, 3, 4, 5, 6] } },
+          "applicableBookingTypes": { "type": "array", "items": { "$ref": "#/components/schemas/BookingType" } },
+          "applicableRoomClasses": { "type": "array", "items": { "$ref": "#/components/schemas/RoomClass" } },
+          "priority": { "type": "integer" },
+          "isActive": { "type": "boolean" },
+          "archivedAt": { "$ref": "#/components/schemas/NullableInstant" },
+          "version": { "type": "integer", "minimum": 1 },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "updatedAt": { "$ref": "#/components/schemas/Instant" }
+        }
+      },
+      "SurchargeRuleEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["surchargeRule"],
+        "properties": {
+          "surchargeRule": { "$ref": "#/components/schemas/SurchargeRule" }
+        }
+      },
+      "Conflict": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conflictType", "allocationType", "id", "from", "to", "message"],
+        "properties": {
+          "conflictType": { "enum": ["direct", "buffer_prior", "buffer_next", "room_block", "room_hold"] },
+          "allocationType": { "enum": ["booking", "block", "hold"] },
+          "id": { "type": "string" },
+          "from": { "$ref": "#/components/schemas/Instant" },
+          "to": { "$ref": "#/components/schemas/Instant" },
+          "message": { "type": "string" }
+        }
+      },
+      "Hold": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "propertyId", "roomId", "roomName", "roomNumber", "roomClass", "bookingType", "ratePlanCode", "checkinAt", "checkoutAt", "occupiedUntil", "earlyCheckinHours", "lateCheckoutHours", "numGuests", "quotedBasePrice", "quotedTotalPrice", "payableAmount", "paymentReference", "status", "expiresAt", "expiresAtSec", "remainingSeconds", "convertedBookingId", "checkoutDraft", "createdBy", "version", "createdAt", "updatedAt", "channel", "sessionId"],
+        "properties": {
+          "id": { "type": "string" },
+          "propertyId": { "type": "string" },
+          "roomId": { "type": "string" },
+          "roomName": { "$ref": "#/components/schemas/NullableString" },
+          "roomNumber": { "$ref": "#/components/schemas/NullableString" },
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "bookingType": { "$ref": "#/components/schemas/BookingType" },
+          "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+          "checkinAt": { "$ref": "#/components/schemas/Instant" },
+          "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+          "occupiedUntil": { "$ref": "#/components/schemas/Instant" },
+          "earlyCheckinHours": { "type": "integer", "minimum": 0 },
+          "lateCheckoutHours": { "type": "integer", "minimum": 0 },
+          "numGuests": { "type": "integer", "minimum": 1 },
+          "quotedBasePrice": { "$ref": "#/components/schemas/Vnd" },
+          "quotedTotalPrice": { "$ref": "#/components/schemas/Vnd" },
+          "payableAmount": { "$ref": "#/components/schemas/Vnd" },
+          "paymentReference": { "$ref": "#/components/schemas/NullableString" },
+          "status": { "enum": ["active", "awaiting_payment", "converted", "cancelled", "expired"] },
+          "expiresAt": { "$ref": "#/components/schemas/Instant" },
+          "expiresAtSec": { "type": "integer" },
+          "remainingSeconds": { "type": "integer", "minimum": 0 },
+          "convertedBookingId": { "$ref": "#/components/schemas/NullableString" },
+          "checkoutDraft": { "type": ["object", "null"] },
+          "createdBy": { "$ref": "#/components/schemas/StaffRef" },
+          "version": { "type": "integer", "minimum": 1 },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "updatedAt": { "$ref": "#/components/schemas/Instant" },
+          "channel": { "$ref": "#/components/schemas/SessionChannel" },
+          "sessionId": { "$ref": "#/components/schemas/NullableString" }
+        }
+      },
+      "HoldEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hold"],
+        "properties": {
+          "hold": { "$ref": "#/components/schemas/Hold" },
+          "replayed": { "type": "boolean" },
+          "extended": { "type": "boolean", "description": "Only on POST /holds/{holdId}/extend: false when the requested expiry was not later than the current one (no-op)." }
+        }
+      },
+      "Room": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "roomNumber", "name", "roomClass", "floor", "areaSqm", "maxGuests", "sortOrder", "isActive", "version"],
+        "properties": {
+          "id": { "type": "string" },
+          "roomNumber": { "type": "string" },
+          "name": { "type": "string" },
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "floor": { "type": "integer" },
+          "areaSqm": { "type": ["integer", "null"] },
+          "maxGuests": { "type": "integer", "minimum": 1 },
+          "sortOrder": { "type": "integer" },
+          "isActive": { "type": "boolean" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "Booking": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Full internal booking DTO. Never contains door codes or secrets. pricing.isFinal=false while the CDP accrual result is pending (§6.7 rule 4).",
+        "required": ["id", "propertyId", "roomId", "roomName", "roomNumber", "roomClass", "customerId", "guest", "numGuests", "bookingType", "ratePlanCode", "checkinAt", "checkoutAt", "occupiedUntil", "earlyCheckinHours", "lateCheckoutHours", "status", "source", "note", "closingNote", "pricing", "promotion", "loyalty", "financial", "lifecycle", "control", "reconciliationStatus", "channel", "sessionId", "voucher"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,64}$" },
+          "propertyId": { "type": "string" },
+          "roomId": { "type": "string" },
+          "roomName": { "$ref": "#/components/schemas/NullableString" },
+          "roomNumber": { "$ref": "#/components/schemas/NullableString" },
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "customerId": { "$ref": "#/components/schemas/NullableString" },
+          "guest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["phone", "phoneDisplay", "contactRaw", "name", "instagram", "facebook", "zalo"],
+            "properties": {
+              "phone": { "type": ["string", "null"], "pattern": "^\\+84[35789]\\d{8}$" },
+              "phoneDisplay": { "type": "string" },
+              "contactRaw": { "type": "string" },
+              "name": { "type": "string" },
+              "instagram": { "$ref": "#/components/schemas/NullableString" },
+              "facebook": { "$ref": "#/components/schemas/NullableString" },
+              "zalo": { "$ref": "#/components/schemas/NullableString" }
+            }
+          },
+          "numGuests": { "type": "integer", "minimum": 1 },
+          "bookingType": { "$ref": "#/components/schemas/BookingType" },
+          "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+          "checkinAt": { "$ref": "#/components/schemas/Instant" },
+          "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+          "occupiedUntil": { "$ref": "#/components/schemas/Instant" },
+          "earlyCheckinHours": { "type": "integer", "minimum": 0 },
+          "lateCheckoutHours": { "type": "integer", "minimum": 0 },
+          "status": { "$ref": "#/components/schemas/BookingStatus" },
+          "source": { "enum": ["admin", "legacy_import"] },
+          "note": { "$ref": "#/components/schemas/NullableString" },
+          "closingNote": { "$ref": "#/components/schemas/NullableString" },
+          "pricing": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["currency", "comboLabel", "durationLabel", "rateRule", "basePrice", "holidaySurcharge", "extraGuestFee", "extraFee", "subtotal", "promotionDiscount", "loyaltyDiscount", "discountAmount", "totalPrice", "originalPrice", "lines", "nightlyBreakdown", "cappingWarning", "isFinal"],
+            "properties": {
+              "currency": { "const": "VND" },
+              "comboLabel": { "$ref": "#/components/schemas/NullableString" },
+              "durationLabel": { "$ref": "#/components/schemas/NullableString" },
+              "rateRule": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["id", "version", "basePrice", "extraHourFee"],
+                "properties": { "id": { "type": "string" }, "version": { "type": "integer" }, "basePrice": { "type": "integer" }, "extraHourFee": { "type": "integer" } }
+              },
+              "basePrice": { "$ref": "#/components/schemas/Vnd" },
+              "holidaySurcharge": { "$ref": "#/components/schemas/Vnd" },
+              "extraGuestFee": { "$ref": "#/components/schemas/Vnd" },
+              "extraFee": { "$ref": "#/components/schemas/Vnd" },
+              "incidentalFee": { "$ref": "#/components/schemas/Vnd" },
+              "incidentalReason": { "$ref": "#/components/schemas/NullableString" },
+              "subtotal": { "$ref": "#/components/schemas/Vnd" },
+              "promotionDiscount": { "$ref": "#/components/schemas/Vnd" },
+              "loyaltyDiscount": { "$ref": "#/components/schemas/Vnd" },
+              "discountAmount": { "$ref": "#/components/schemas/Vnd" },
+              "totalPrice": { "type": "integer", "minimum": 0 },
+              "originalPrice": { "type": ["integer", "null"] },
+              "lines": { "type": "array", "items": { "$ref": "#/components/schemas/PriceLine" } },
+              "nightlyBreakdown": { "type": "array", "items": { "$ref": "#/components/schemas/NightlyBreakdownItem" } },
+              "cappingWarning": { "oneOf": [{ "$ref": "#/components/schemas/CappingWarning" }, { "type": "null" }] },
+              "isFinal": { "type": "boolean" }
+            }
+          },
+          "promotion": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["id", "code", "name", "version", "discountAmount"],
+            "properties": {
+              "id": { "type": "string" },
+              "code": { "$ref": "#/components/schemas/NullableString" },
+              "name": { "type": "string" },
+              "version": { "type": "integer" },
+              "discountAmount": { "$ref": "#/components/schemas/Vnd" }
+            }
+          },
+          "loyalty": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["syncStatus", "step", "tier", "reward", "syncedAt"],
+            "properties": {
+              "syncStatus": { "$ref": "#/components/schemas/LoyaltySyncStatus" },
+              "step": { "type": ["integer", "null"] },
+              "tier": { "type": ["string", "null"] },
+              "reward": { "type": ["object", "null"], "description": "CDP accrual reward snapshot (rewardType/rewardValue/label/ruleVersion/stamp/lifetimeBookingCount) — authoritative." },
+              "syncedAt": { "$ref": "#/components/schemas/NullableInstant" }
+            }
+          },
+          "financial": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["isDeposit", "depositAmount", "paidAmount", "refundAmount", "netPaid", "remainingAmount", "overpaidAmount", "depositStatus", "depositDueDate", "depositPaidAt", "depositReminderSentAt", "depositReminderSentBy", "remainingPaidAt", "remainingPaidBy"],
+            "properties": {
+              "isDeposit": { "type": "boolean" },
+              "depositAmount": { "$ref": "#/components/schemas/Vnd" },
+              "paidAmount": { "$ref": "#/components/schemas/Vnd" },
+              "refundAmount": { "$ref": "#/components/schemas/Vnd" },
+              "netPaid": { "$ref": "#/components/schemas/Vnd" },
+              "remainingAmount": { "type": "integer", "minimum": 0 },
+              "overpaidAmount": { "type": "integer", "minimum": 0 },
+              "depositStatus": { "enum": ["none", "deposit_paid", "fully_paid"] },
+              "depositDueDate": { "$ref": "#/components/schemas/NullableBusinessDate" },
+              "depositPaidAt": { "$ref": "#/components/schemas/NullableInstant" },
+              "depositReminderSentAt": { "$ref": "#/components/schemas/NullableInstant" },
+              "depositReminderSentBy": { "$ref": "#/components/schemas/StaffRef" },
+              "remainingPaidAt": { "$ref": "#/components/schemas/NullableInstant" },
+              "remainingPaidBy": { "$ref": "#/components/schemas/StaffRef" }
+            }
+          },
+          "lifecycle": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["confirmedAt", "cancelledAt", "cancelledBy", "cancelReason", "noShowAt", "noShowBy", "noShowReason"],
+            "properties": {
+              "confirmedAt": { "$ref": "#/components/schemas/NullableInstant" },
+              "cancelledAt": { "$ref": "#/components/schemas/NullableInstant" },
+              "cancelledBy": { "$ref": "#/components/schemas/StaffRef" },
+              "cancelReason": { "$ref": "#/components/schemas/NullableString" },
+              "noShowAt": { "$ref": "#/components/schemas/NullableInstant" },
+              "noShowBy": { "$ref": "#/components/schemas/StaffRef" },
+              "noShowReason": { "$ref": "#/components/schemas/NullableString" }
+            }
+          },
+          "control": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["version", "createdAt", "createdBy", "updatedAt", "updatedBy"],
+            "properties": {
+              "version": { "type": "integer", "minimum": 1, "description": "Optimistic concurrency token: send as expectedVersion." },
+              "createdAt": { "$ref": "#/components/schemas/Instant" },
+              "createdBy": { "$ref": "#/components/schemas/StaffRef" },
+              "updatedAt": { "$ref": "#/components/schemas/Instant" },
+              "updatedBy": { "$ref": "#/components/schemas/StaffRef" }
+            }
+          },
+          "reconciliationStatus": { "enum": ["ok", "needs_review"] },
+          "channel": { "$ref": "#/components/schemas/SessionChannel" },
+          "sessionId": { "$ref": "#/components/schemas/NullableString" },
+          "voucher": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["code", "value"],
+            "properties": { "code": { "type": "string" }, "value": { "$ref": "#/components/schemas/Vnd" } }
+          }
+        }
+      },
+      "BookingEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["booking"],
+        "properties": { "booking": { "$ref": "#/components/schemas/Booking" }, "replayed": { "type": "boolean" } }
+      },
+      "Block": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "roomId", "roomName", "roomClass", "blockedFrom", "blockedTo", "reason", "note", "status", "createdBy", "createdAt", "releasedAt", "releasedBy", "releaseReason", "version"],
+        "properties": {
+          "id": { "type": "string" },
+          "roomId": { "type": "string" },
+          "roomName": { "$ref": "#/components/schemas/NullableString" },
+          "roomClass": { "type": ["string", "null"] },
+          "blockedFrom": { "$ref": "#/components/schemas/Instant" },
+          "blockedTo": { "$ref": "#/components/schemas/Instant" },
+          "reason": { "type": "string" },
+          "note": { "$ref": "#/components/schemas/NullableString" },
+          "status": { "enum": ["active", "released"] },
+          "createdBy": { "$ref": "#/components/schemas/StaffRef" },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "releasedAt": { "$ref": "#/components/schemas/NullableInstant" },
+          "releasedBy": { "$ref": "#/components/schemas/StaffRef" },
+          "releaseReason": { "$ref": "#/components/schemas/NullableString" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "BlockEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["block"],
+        "properties": { "block": { "$ref": "#/components/schemas/Block" }, "replayed": { "type": "boolean" } }
+      },
+      "FinancialEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Append-only manual ledger entry. amount is signed (+ received, − returned); reversals copy the bucket with the opposite sign.",
+        "required": ["id", "bookingId", "entryType", "bucket", "amount", "method", "reference", "reason", "reversesEntryId", "actor", "source", "occurredAt", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "bookingId": { "type": "string" },
+          "entryType": { "enum": ["deposit", "payment", "refund", "adjustment", "reversal"] },
+          "bucket": { "enum": ["received", "refunded"] },
+          "amount": { "type": "integer" },
+          "method": { "enum": ["cash", "bank_transfer", "card", "ewallet", "other", "legacy_unknown"] },
+          "reference": { "$ref": "#/components/schemas/NullableString" },
+          "reason": { "$ref": "#/components/schemas/NullableString" },
+          "reversesEntryId": { "$ref": "#/components/schemas/NullableString" },
+          "actor": { "$ref": "#/components/schemas/StaffRef" },
+          "source": { "enum": ["admin", "legacy_backfill"] },
+          "occurredAt": { "$ref": "#/components/schemas/Instant" },
+          "createdAt": { "$ref": "#/components/schemas/Instant" }
+        }
+      },
+      "EntryEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entry", "booking", "replayed"],
+        "properties": { "entry": { "$ref": "#/components/schemas/FinancialEntry" }, "booking": { "$ref": "#/components/schemas/Booking" }, "replayed": { "type": "boolean" } }
+      },
+      "OutboxItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Booking → CDP command (no PII: guest phone is not exposed here).",
+        "required": ["id", "bookingId", "commandType", "outcome", "eventType", "occurredAt", "status", "attempts", "nextAttemptAt", "lastError", "result", "createdAt", "updatedAt", "completedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "bookingId": { "type": "string" },
+          "commandType": { "enum": ["accrue_booking", "record_outcome"] },
+          "outcome": { "enum": ["cancelled", "no_show", null] },
+          "eventType": { "enum": ["booking.confirmed.v1", "booking.cancelled.v1", "booking.no_show.v1"] },
+          "occurredAt": { "$ref": "#/components/schemas/Instant" },
+          "status": { "enum": ["pending", "processing", "done", "dead"] },
+          "attempts": { "type": "integer", "minimum": 0 },
+          "nextAttemptAt": { "$ref": "#/components/schemas/Instant" },
+          "lastError": { "$ref": "#/components/schemas/NullableString" },
+          "result": { "type": ["object", "null"] },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "updatedAt": { "$ref": "#/components/schemas/Instant" },
+          "completedAt": { "$ref": "#/components/schemas/NullableInstant" }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "eventType", "actor", "payload", "createdAt"],
+        "properties": {
+          "id": { "type": "integer" },
+          "eventType": { "type": "string" },
+          "actor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "id", "name"],
+            "properties": { "type": { "enum": ["staff", "service", "system"] }, "id": { "$ref": "#/components/schemas/NullableString" }, "name": { "$ref": "#/components/schemas/NullableString" } }
+          },
+          "payload": { "type": "object" },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "caller": { "$ref": "#/components/schemas/NullableString" }
+        }
+      },
+      "Promotion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "categoryId", "categoryName", "categoryCode", "categoryIcon", "categoryColor", "name", "code", "description", "discountType", "discountValue", "maxDiscountAmount", "minOrderAmount", "applicableRoomClasses", "applicableBookingTypes", "applicableRatePlanCodes", "applicableLoyaltyTiers", "applicableDaysOfWeek", "startDate", "endDate", "bookingWindowStart", "bookingWindowEnd", "minNights", "blackoutDates", "isStackableWithHoliday", "isPublic", "usageLimit", "maxUsesPerGuest", "usedCount", "isActive", "archivedAt", "version", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "categoryId": { "type": "string" },
+          "categoryName": { "$ref": "#/components/schemas/NullableString" },
+          "categoryCode": { "$ref": "#/components/schemas/NullableString" },
+          "categoryIcon": { "$ref": "#/components/schemas/NullableString" },
+          "categoryColor": { "$ref": "#/components/schemas/NullableString" },
+          "name": { "type": "string" },
+          "code": { "type": ["string", "null"], "pattern": "^[A-Z0-9_-]{3,32}$" },
+          "description": { "$ref": "#/components/schemas/NullableString" },
+          "discountType": { "enum": ["percentage", "fixed_amount"] },
+          "discountValue": { "type": "integer", "minimum": 1 },
+          "maxDiscountAmount": { "type": ["integer", "null"] },
+          "minOrderAmount": { "type": "integer", "minimum": 0 },
+          "applicableRoomClasses": { "type": "array", "items": { "$ref": "#/components/schemas/RoomClass" } },
+          "applicableBookingTypes": { "type": "array", "items": { "$ref": "#/components/schemas/BookingType" } },
+          "applicableRatePlanCodes": { "type": "array", "items": { "$ref": "#/components/schemas/RatePlanCode" } },
+          "applicableLoyaltyTiers": { "type": "array", "items": { "$ref": "#/components/schemas/Tier" } },
+          "applicableDaysOfWeek": { "type": "array", "items": { "enum": [0, 1, 2, 3, 4, 5, 6] } },
+          "startDate": { "$ref": "#/components/schemas/NullableBusinessDate" },
+          "endDate": { "$ref": "#/components/schemas/NullableBusinessDate" },
+          "bookingWindowStart": { "$ref": "#/components/schemas/NullableBusinessDate" },
+          "bookingWindowEnd": { "$ref": "#/components/schemas/NullableBusinessDate" },
+          "minNights": { "type": "integer", "minimum": 1 },
+          "blackoutDates": { "type": "array", "items": { "$ref": "#/components/schemas/BusinessDate" } },
+          "isStackableWithHoliday": { "type": "boolean" },
+          "isPublic": { "type": "boolean", "description": "AI-8: advertised by the AI receptionist and applied without a code (best eligible discount) when a search/quote asks for applyPublicPromotions." },
+          "usageLimit": { "type": ["integer", "null"] },
+          "maxUsesPerGuest": { "type": ["integer", "null"] },
+          "usedCount": { "type": "integer", "minimum": 0 },
+          "isActive": { "type": "boolean" },
+          "archivedAt": { "$ref": "#/components/schemas/NullableInstant" },
+          "version": { "type": "integer", "minimum": 1 },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "updatedAt": { "$ref": "#/components/schemas/Instant" }
+        }
+      },
+      "PromotionEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["promotion"],
+        "properties": { "promotion": { "$ref": "#/components/schemas/Promotion" } }
+      },
+      "Category": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "code", "description", "icon", "badgeColor", "sortOrder", "isActive", "version", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "code": { "type": "string" },
+          "description": { "$ref": "#/components/schemas/NullableString" },
+          "icon": { "type": "string" },
+          "badgeColor": { "enum": ["purple", "amber", "emerald", "sky", "rose", "indigo"] },
+          "sortOrder": { "type": "integer" },
+          "isActive": { "type": "boolean" },
+          "version": { "type": "integer", "minimum": 1 },
+          "promoCount": { "type": "integer", "minimum": 0 },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "updatedAt": { "$ref": "#/components/schemas/Instant" }
+        }
+      },
+      "CategoryEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category"],
+        "properties": { "category": { "$ref": "#/components/schemas/Category" } }
+      },
+      "BookingRules": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["min_hourly", "min_hourly_checkin", "max_hourly_checkin", "overnight_start", "overnight_max_checkout", "day_checkin", "day_checkout", "max_late_checkout_hours", "extra_hour_fee", "max_stay_hours", "require_social_account", "standard_guests", "max_advance_days", "min_lead_minutes"],
+        "properties": {
+          "min_hourly": { "type": "integer" },
+          "min_hourly_checkin": { "type": "string" },
+          "max_hourly_checkin": { "type": "string" },
+          "overnight_start": { "type": "string" },
+          "overnight_max_checkout": { "type": "string" },
+          "day_checkin": { "type": "string" },
+          "day_checkout": { "type": "string" },
+          "max_late_checkout_hours": { "type": "integer" },
+          "extra_hour_fee": { "type": "integer" },
+          "max_stay_hours": { "type": "integer" },
+          "require_social_account": { "type": "boolean" },
+          "standard_guests": { "type": "integer" },
+          "version": { "type": "integer" },
+          "max_advance_days": { "type": "integer", "minimum": 1, "maximum": 730 },
+          "min_lead_minutes": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "Catalog": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["catalogVersion", "property", "rooms", "rateRules", "surchargeRules", "bookingRules", "hourlyCheckinSlots", "inventoryPolicy", "promotionCategories", "activePromotions", "overnightShifts"],
+        "properties": {
+          "catalogVersion": { "type": "integer" },
+          "property": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["id", "name", "address", "timezone", "currency", "hotline", "bank", "checkinInstruction"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "address": { "type": "string" },
+              "timezone": { "const": "Asia/Ho_Chi_Minh" },
+              "currency": { "const": "VND" },
+              "hotline": { "$ref": "#/components/schemas/NullableString" },
+              "bank": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["bankId", "account", "holderName"],
+                "properties": { "bankId": { "$ref": "#/components/schemas/NullableString" }, "account": { "$ref": "#/components/schemas/NullableString" }, "holderName": { "$ref": "#/components/schemas/NullableString" } }
+              },
+              "checkinInstruction": { "$ref": "#/components/schemas/NullableString" }
+            }
+          },
+          "rooms": { "type": "array", "items": { "$ref": "#/components/schemas/Room" } },
+          "rateRules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "roomClass", "ratePlanCode", "basePrice", "extraHourFee", "isActive", "version", "updatedAt"],
+              "properties": {
+                "id": { "type": "string" },
+                "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+                "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+                "basePrice": { "$ref": "#/components/schemas/Vnd" },
+                "extraHourFee": { "$ref": "#/components/schemas/Vnd" },
+                "isActive": { "type": "boolean" },
+                "version": { "type": "integer" },
+                "updatedAt": { "$ref": "#/components/schemas/Instant" }
+              }
+            }
+          },
+          "surchargeRules": { "type": "array", "items": { "$ref": "#/components/schemas/SurchargeRule" } },
+          "bookingRules": { "$ref": "#/components/schemas/BookingRules" },
+          "hourlyCheckinSlots": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slots", "version"],
+            "properties": { "slots": { "type": "array", "items": { "type": "integer" } }, "version": { "type": "integer" } }
+          },
+          "inventoryPolicy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slotMinutes", "turnoverMinutes", "timezone"],
+            "properties": { "slotMinutes": { "const": 30 }, "turnoverMinutes": { "const": 60 }, "timezone": { "const": "Asia/Ho_Chi_Minh" } }
+          },
+          "promotionCategories": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } },
+          "activePromotions": { "type": "array", "items": { "$ref": "#/components/schemas/Promotion" } },
+          "overnightShifts": { "$ref": "#/components/schemas/OvernightShiftsConfig" }
+        }
+      },
+      "Quote": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["quote", "availability"],
+        "properties": {
+          "quote": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Never final: the stamp reward is advisory until the CDP accrual result (isFinal is always false).",
+            "required": ["roomId", "roomClass", "bookingType", "ratePlanCode", "comboLabel", "durationLabel", "basePrice", "holidaySurcharge", "extraGuestFee", "extraFee", "earlyCheckinHours", "lateCheckoutHours", "lines", "nightlyBreakdown", "cappingWarning", "subtotal", "promotion", "totalBeforeLoyalty", "loyaltyPreview", "estimatedTotal", "isFinal", "calculatedAt", "checksum", "bookingRulesVersion"],
+            "properties": {
+              "roomId": { "type": "string" },
+              "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+              "bookingType": { "$ref": "#/components/schemas/BookingType" },
+              "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+              "comboLabel": { "type": "string" },
+              "durationLabel": { "type": "string" },
+              "basePrice": { "$ref": "#/components/schemas/Vnd" },
+              "holidaySurcharge": { "$ref": "#/components/schemas/Vnd" },
+              "extraGuestFee": { "$ref": "#/components/schemas/Vnd" },
+              "extraFee": { "$ref": "#/components/schemas/Vnd" },
+              "earlyCheckinHours": { "type": "integer", "minimum": 0 },
+              "lateCheckoutHours": { "type": "integer", "minimum": 0 },
+              "lines": { "type": "array", "items": { "$ref": "#/components/schemas/PriceLine" } },
+              "nightlyBreakdown": { "type": "array", "items": { "$ref": "#/components/schemas/NightlyBreakdownItem" } },
+              "cappingWarning": { "oneOf": [{ "$ref": "#/components/schemas/CappingWarning" }, { "type": "null" }] },
+              "subtotal": { "$ref": "#/components/schemas/Vnd" },
+              "promotion": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["id", "code", "name", "eligible", "reasonCode", "reason", "discount"],
+                "properties": {
+                  "id": { "$ref": "#/components/schemas/NullableString" },
+                  "code": { "$ref": "#/components/schemas/NullableString" },
+                  "name": { "$ref": "#/components/schemas/NullableString" },
+                  "eligible": { "type": "boolean" },
+                  "reasonCode": { "$ref": "#/components/schemas/NullableString" },
+                  "reason": { "$ref": "#/components/schemas/NullableString" },
+                  "discount": { "$ref": "#/components/schemas/Vnd" }
+                }
+              },
+              "totalBeforeLoyalty": { "$ref": "#/components/schemas/Vnd" },
+              "loyaltyPreview": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["available", "unavailableReason", "tier", "found", "decision", "stepAwarded", "reward", "tierAfter", "advisory"],
+                "properties": {
+                  "available": { "type": "boolean" },
+                  "unavailableReason": { "$ref": "#/components/schemas/NullableString" },
+                  "tier": { "enum": ["not_member", "bronze", "silver", "gold", null] },
+                  "found": { "type": ["boolean", "null"] },
+                  "decision": { "$ref": "#/components/schemas/NullableString" },
+                  "stepAwarded": { "type": ["integer", "null"] },
+                  "reward": { "type": ["object", "null"] },
+                  "tierAfter": { "enum": ["not_member", "bronze", "silver", "gold", null] },
+                  "advisory": { "const": true }
+                }
+              },
+              "estimatedTotal": { "$ref": "#/components/schemas/Vnd" },
+              "isFinal": { "const": false },
+              "calculatedAt": { "$ref": "#/components/schemas/Instant" },
+              "checksum": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "bookingRulesVersion": { "type": "integer" },
+              "vouchers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "code", "codeMasked", "value", "label", "expiresAt"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "code": { "$ref": "#/components/schemas/NullableString" },
+                    "codeMasked": { "type": "string" },
+                    "value": { "$ref": "#/components/schemas/Vnd" },
+                    "label": { "type": "string" },
+                    "expiresAt": { "$ref": "#/components/schemas/Instant" }
+                  }
+                }
+              },
+              "voucherApplied": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["id", "codeMasked", "label", "discount"],
+                "properties": { "id": { "type": "string" }, "codeMasked": { "type": "string" }, "label": { "type": "string" }, "discount": { "$ref": "#/components/schemas/Vnd" } }
+              },
+              "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/Warning" } }
+            }
+          },
+          "availability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["available", "conflicts"],
+            "properties": { "available": { "type": "boolean" }, "conflicts": { "type": "array", "items": { "$ref": "#/components/schemas/Conflict" } } }
+          }
+        }
+      },
+      "AvailabilitySearch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["searchedAt", "bookingsVersion", "checkinAt", "checkoutAt", "rooms", "bookingWindow"],
+        "properties": {
+          "searchedAt": { "$ref": "#/components/schemas/Instant" },
+          "bookingsVersion": { "type": "integer" },
+          "checkinAt": { "$ref": "#/components/schemas/Instant" },
+          "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["room", "available", "reasons", "conflicts", "price"],
+              "properties": {
+                "room": { "$ref": "#/components/schemas/Room" },
+                "available": { "type": "boolean" },
+                "reasons": {
+                  "type": "array",
+                  "items": { "type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" } } }
+                },
+                "conflicts": { "type": "array", "items": { "$ref": "#/components/schemas/Conflict" } },
+                "price": {
+                  "type": ["object", "null"],
+                  "additionalProperties": false,
+                  "required": ["ratePlanCode", "comboLabel", "durationLabel", "basePrice", "holidaySurcharge", "extraGuestFee", "extraFee", "subtotal", "lines", "cappingWarning"],
+                  "properties": {
+                    "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+                    "comboLabel": { "type": "string" },
+                    "durationLabel": { "type": "string" },
+                    "basePrice": { "$ref": "#/components/schemas/Vnd" },
+                    "holidaySurcharge": { "$ref": "#/components/schemas/Vnd" },
+                    "extraGuestFee": { "$ref": "#/components/schemas/Vnd" },
+                    "extraFee": { "$ref": "#/components/schemas/Vnd" },
+                    "subtotal": { "$ref": "#/components/schemas/Vnd" },
+                    "lines": { "type": "array", "items": { "$ref": "#/components/schemas/PriceLine" } },
+                    "cappingWarning": { "oneOf": [{ "$ref": "#/components/schemas/CappingWarning" }, { "type": "null" }] },
+                    "promotion": {
+                      "description": "Only with applyPublicPromotions: the public promotion applied (null = none eligible).",
+                      "type": ["object", "null"],
+                      "additionalProperties": false,
+                      "required": ["id", "code", "name", "discount"],
+                      "properties": { "id": { "type": "string" }, "code": { "$ref": "#/components/schemas/NullableString" }, "name": { "type": "string" }, "discount": { "$ref": "#/components/schemas/Vnd" } }
+                    },
+                    "total": { "description": "Only with applyPublicPromotions: subtotal − public promotion discount.", "$ref": "#/components/schemas/Vnd" }
+                  }
+                },
+                "overnightAddons": { "$ref": "#/components/schemas/OvernightAddons" }
+              }
+            }
+          },
+          "bookingWindow": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["maxAdvanceDays", "maxDate"],
+            "properties": { "maxAdvanceDays": { "type": "integer" }, "maxDate": { "$ref": "#/components/schemas/BusinessDate" } }
+          },
+          "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/Warning" } },
+          "shiftSummary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "label", "checkinAt", "checkoutAt", "availableRooms", "past"],
+              "properties": {
+                "code": { "type": "string" },
+                "label": { "type": "string" },
+                "checkinAt": { "$ref": "#/components/schemas/Instant" },
+                "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+                "availableRooms": { "type": "integer" },
+                "past": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      },
+      "PromotionValidation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["valid", "reasonCode", "reason", "discountAmount", "finalPrice", "promotion"],
+        "properties": {
+          "valid": { "type": "boolean" },
+          "reasonCode": { "$ref": "#/components/schemas/NullableString" },
+          "reason": { "$ref": "#/components/schemas/NullableString" },
+          "discountAmount": { "$ref": "#/components/schemas/Vnd" },
+          "finalPrice": { "$ref": "#/components/schemas/Vnd" },
+          "promotion": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["id", "name", "code", "discountType", "discountValue", "maxDiscountAmount", "version"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "code": { "$ref": "#/components/schemas/NullableString" },
+              "discountType": { "enum": ["percentage", "fixed_amount"] },
+              "discountValue": { "type": "integer" },
+              "maxDiscountAmount": { "type": ["integer", "null"] },
+              "version": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "BookingList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bookings", "total", "page", "pageSize", "totalPages"],
+        "properties": {
+          "bookings": { "type": "array", "items": { "$ref": "#/components/schemas/Booking" } },
+          "total": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1 },
+          "pageSize": { "type": "integer", "minimum": 1 },
+          "totalPages": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "BookingDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["booking", "financialEntries", "loyaltyOutbox", "audit"],
+        "properties": {
+          "booking": { "$ref": "#/components/schemas/Booking" },
+          "financialEntries": { "type": "array", "items": { "$ref": "#/components/schemas/FinancialEntry" } },
+          "loyaltyOutbox": { "type": "array", "items": { "$ref": "#/components/schemas/OutboxItem" } },
+          "audit": { "type": "array", "items": { "$ref": "#/components/schemas/AuditEvent" } }
+        }
+      },
+      "GanttBooking": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "roomId", "guestName", "phone", "instagram", "facebook", "zalo", "closingNote", "note", "bookingType", "ratePlanCode", "checkinAt", "checkoutAt", "occupiedUntil", "totalPrice", "status", "loyaltySyncStatus", "isDeposit", "depositAmount", "paidAmount", "remainingAmount", "depositDueDate", "depositStatus", "depositPaidAt", "depositReminderSentAt", "remainingPaidAt", "modNo", "version"],
+        "properties": {
+          "id": { "type": "string" },
+          "roomId": { "type": "string" },
+          "guestName": { "type": "string" },
+          "phone": { "type": "string" },
+          "instagram": { "$ref": "#/components/schemas/NullableString" },
+          "facebook": { "$ref": "#/components/schemas/NullableString" },
+          "zalo": { "$ref": "#/components/schemas/NullableString" },
+          "closingNote": { "$ref": "#/components/schemas/NullableString" },
+          "note": { "$ref": "#/components/schemas/NullableString" },
+          "bookingType": { "$ref": "#/components/schemas/BookingType" },
+          "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+          "checkinAt": { "$ref": "#/components/schemas/Instant" },
+          "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+          "occupiedUntil": { "$ref": "#/components/schemas/Instant" },
+          "totalPrice": { "$ref": "#/components/schemas/Vnd" },
+          "status": { "enum": ["pending", "confirmed"] },
+          "loyaltySyncStatus": { "$ref": "#/components/schemas/LoyaltySyncStatus" },
+          "isDeposit": { "enum": [0, 1] },
+          "depositAmount": { "$ref": "#/components/schemas/Vnd" },
+          "paidAmount": { "$ref": "#/components/schemas/Vnd" },
+          "remainingAmount": { "$ref": "#/components/schemas/Vnd" },
+          "depositDueDate": { "$ref": "#/components/schemas/NullableBusinessDate" },
+          "depositStatus": { "enum": ["none", "deposit_paid", "fully_paid"] },
+          "depositPaidAt": { "$ref": "#/components/schemas/NullableInstant" },
+          "depositReminderSentAt": { "$ref": "#/components/schemas/NullableInstant" },
+          "remainingPaidAt": { "$ref": "#/components/schemas/NullableInstant" },
+          "modNo": { "type": "integer", "description": "Legacy alias of version." },
+          "version": { "type": "integer" }
+        }
+      },
+      "GanttRoom": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "roomNumber", "name", "roomClass", "floor", "areaSqm", "maxGuests", "sortOrder", "isActive", "version", "bookings", "blocks", "holds"],
+        "properties": {
+          "id": { "type": "string" },
+          "roomNumber": { "type": "string" },
+          "name": { "type": "string" },
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "floor": { "type": "integer" },
+          "areaSqm": { "type": ["integer", "null"] },
+          "maxGuests": { "type": "integer" },
+          "sortOrder": { "type": "integer" },
+          "isActive": { "type": "boolean" },
+          "version": { "type": "integer" },
+          "bookings": { "type": "array", "items": { "$ref": "#/components/schemas/GanttBooking" } },
+          "blocks": { "type": "array", "items": { "$ref": "#/components/schemas/Block" } },
+          "holds": { "type": "array", "items": { "$ref": "#/components/schemas/GanttHold" } }
+        }
+      },
+      "Gantt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["range", "bookingsVersion", "rooms"],
+        "properties": {
+          "date": { "$ref": "#/components/schemas/BusinessDate" },
+          "month": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" },
+          "daysInMonth": { "type": "integer" },
+          "range": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": { "from": { "$ref": "#/components/schemas/Instant" }, "to": { "$ref": "#/components/schemas/Instant" } }
+          },
+          "bookingsVersion": { "type": "integer" },
+          "rooms": { "type": "array", "items": { "$ref": "#/components/schemas/GanttRoom" } }
+        }
+      },
+      "RosterItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "roomId", "roomName", "roomNumber", "roomClass", "guestName", "phone", "instagram", "facebook", "zalo", "bookingType", "ratePlanCode", "checkinAt", "checkoutAt", "turnoverStartAt", "turnoverEndAt", "lateCheckoutHours", "totalPrice", "remainingAmount", "status", "loyaltySyncStatus", "loyaltyTier", "loyaltyStep", "closingNote", "note", "createdAt", "createdBy", "updatedAt", "version"],
+        "properties": {
+          "id": { "type": "string" },
+          "roomId": { "type": "string" },
+          "roomName": { "$ref": "#/components/schemas/NullableString" },
+          "roomNumber": { "$ref": "#/components/schemas/NullableString" },
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "guestName": { "type": "string" },
+          "phone": { "type": "string" },
+          "instagram": { "$ref": "#/components/schemas/NullableString" },
+          "facebook": { "$ref": "#/components/schemas/NullableString" },
+          "zalo": { "$ref": "#/components/schemas/NullableString" },
+          "bookingType": { "$ref": "#/components/schemas/BookingType" },
+          "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+          "checkinAt": { "$ref": "#/components/schemas/Instant" },
+          "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+          "turnoverStartAt": { "$ref": "#/components/schemas/Instant" },
+          "turnoverEndAt": { "$ref": "#/components/schemas/Instant" },
+          "lateCheckoutHours": { "type": "integer" },
+          "totalPrice": { "$ref": "#/components/schemas/Vnd" },
+          "remainingAmount": { "$ref": "#/components/schemas/Vnd" },
+          "status": { "enum": ["pending", "confirmed"] },
+          "loyaltySyncStatus": { "$ref": "#/components/schemas/LoyaltySyncStatus" },
+          "loyaltyTier": { "$ref": "#/components/schemas/NullableString" },
+          "loyaltyStep": { "type": ["integer", "null"] },
+          "closingNote": { "$ref": "#/components/schemas/NullableString" },
+          "note": { "$ref": "#/components/schemas/NullableString" },
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "createdBy": { "$ref": "#/components/schemas/StaffRef" },
+          "updatedAt": { "$ref": "#/components/schemas/Instant" },
+          "version": { "type": "integer" }
+        }
+      },
+      "Roster": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "summary", "checkins", "checkouts"],
+        "properties": {
+          "date": { "$ref": "#/components/schemas/BusinessDate" },
+          "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["totalCheckins", "totalCheckouts", "hourlyCount", "overnightCount", "dayuseCount", "customCount", "loyaltyPendingCount"],
+            "properties": {
+              "totalCheckins": { "type": "integer" },
+              "totalCheckouts": { "type": "integer" },
+              "hourlyCount": { "type": "integer" },
+              "overnightCount": { "type": "integer" },
+              "dayuseCount": { "type": "integer" },
+              "customCount": { "type": "integer" },
+              "loyaltyPendingCount": { "type": "integer" }
+            }
+          },
+          "checkins": { "type": "array", "items": { "$ref": "#/components/schemas/RosterItem" } },
+          "checkouts": { "type": "array", "items": { "$ref": "#/components/schemas/RosterItem" } }
+        }
+      },
+      "SessionChannel": { "type": ["string", "null"], "enum": ["web", "admin", "chat", null] },
+      "OvernightAddonOption": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hours", "type", "shortLabel", "label", "effectiveTimeIso", "surchargeVnd", "available"],
+        "properties": {
+          "hours": { "type": "integer", "minimum": 1 },
+          "type": { "enum": ["early_checkin", "late_checkout"] },
+          "shortLabel": { "type": "string" },
+          "label": { "type": "string" },
+          "effectiveTimeIso": { "$ref": "#/components/schemas/Instant" },
+          "surchargeVnd": { "$ref": "#/components/schemas/Vnd" },
+          "available": { "type": "boolean" },
+          "unavailableReason": { "enum": ["SLOT_OCCUPIED", "TURNOVER_BUFFER_CONFLICT", "IN_THE_PAST"] }
+        }
+      },
+      "OvernightAddons": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["shift", "baseCheckinAt", "baseCheckoutAt", "maxEarlyAllowedByRule", "maxLateAllowedByRule", "surchargePerHour", "earlyCheckinOptions", "lateCheckoutOptions"],
+        "description": "LSB-1: per-room add-on buttons for an overnight shift (spec §2.2), honouring the bidirectional 60' turnover and contiguity.",
+        "properties": {
+          "shift": { "type": "string" },
+          "baseCheckinAt": { "$ref": "#/components/schemas/Instant" },
+          "baseCheckoutAt": { "$ref": "#/components/schemas/Instant" },
+          "maxEarlyAllowedByRule": { "type": "integer" },
+          "maxLateAllowedByRule": { "type": "integer" },
+          "surchargePerHour": { "$ref": "#/components/schemas/Vnd" },
+          "earlyCheckinOptions": { "type": "array", "items": { "$ref": "#/components/schemas/OvernightAddonOption" } },
+          "lateCheckoutOptions": { "type": "array", "items": { "$ref": "#/components/schemas/OvernightAddonOption" } }
+        }
+      },
+      "Warning": { "type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" } } },
+      "OvernightShiftsConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["window_start", "window_end", "max_addon_hours", "shifts"],
+        "properties": {
+          "window_start": { "type": "string" },
+          "window_end": { "type": "string" },
+          "max_addon_hours": { "type": "integer" },
+          "version": { "type": "integer" },
+          "shifts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "start", "end", "label"],
+              "properties": { "code": { "type": "string" }, "start": { "type": "string" }, "end": { "type": "string" }, "label": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "GanttHold": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "bookingType", "checkinAt", "checkoutAt", "status", "expiresAt", "remainingSeconds", "payableAmount", "channel", "sessionId", "guestNameMasked"],
+        "properties": {
+          "id": { "type": "string" },
+          "bookingType": { "$ref": "#/components/schemas/BookingType" },
+          "checkinAt": { "$ref": "#/components/schemas/Instant" },
+          "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+          "status": { "enum": ["active", "awaiting_payment"] },
+          "expiresAt": { "$ref": "#/components/schemas/Instant" },
+          "remainingSeconds": { "type": "integer" },
+          "payableAmount": { "$ref": "#/components/schemas/Vnd" },
+          "channel": { "enum": ["web", "admin", "chat"] },
+          "sessionId": { "$ref": "#/components/schemas/NullableString" },
+          "guestNameMasked": { "$ref": "#/components/schemas/NullableString" }
+        }
+      },
+      "Storefront": {
+        "type": "object",
+        "description": "LSB-1 public storefront (no private promotion codes)",
+        "required": ["catalogVersion", "rooms", "rates", "extraGuest", "hourly", "overnight", "dayuse", "bookingWindow", "publicPromotions"],
+        "properties": {
+          "catalogVersion": { "type": "integer" },
+          "property": { "type": ["object", "null"] },
+          "bank": { "type": ["object", "null"] },
+          "rooms": { "type": "array", "items": { "type": "object" } },
+          "rates": { "type": "object" },
+          "extraGuest": { "type": "object" },
+          "hourly": { "type": "object" },
+          "overnight": { "$ref": "#/components/schemas/OvernightShiftsConfig" },
+          "dayuse": { "type": "object" },
+          "bookingWindow": {
+            "type": "object",
+            "required": ["today", "maxAdvanceDays", "maxDate", "minLeadMinutes"],
+            "properties": {
+              "today": { "$ref": "#/components/schemas/BusinessDate" },
+              "maxAdvanceDays": { "type": "integer" },
+              "maxDate": { "$ref": "#/components/schemas/BusinessDate" },
+              "minLeadMinutes": { "type": "integer" }
+            }
+          },
+          "publicPromotions": { "type": "array", "items": { "type": "object", "not": { "required": ["code"] } } }
+        }
+      },
+      "InventoryVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "at"],
+        "properties": { "version": { "type": "integer" }, "at": { "$ref": "#/components/schemas/Instant" } }
+      },
+      "GuestLookup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["booking"],
+        "properties": {
+          "booking": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "roomId", "roomNumber", "roomName", "roomClass", "bookingType", "checkinAt", "checkoutAt", "numGuests", "guestNameMasked", "status", "channel", "sessionId", "totalPrice", "paidAmount", "remainingAmount"],
+            "properties": {
+              "id": { "type": "string" },
+              "roomId": { "type": "string" },
+              "roomNumber": { "$ref": "#/components/schemas/NullableString" },
+              "roomName": { "$ref": "#/components/schemas/NullableString" },
+              "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+              "bookingType": { "$ref": "#/components/schemas/BookingType" },
+              "checkinAt": { "$ref": "#/components/schemas/Instant" },
+              "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+              "numGuests": { "type": "integer" },
+              "guestNameMasked": { "type": "string" },
+              "status": { "$ref": "#/components/schemas/BookingStatus" },
+              "channel": { "$ref": "#/components/schemas/SessionChannel" },
+              "sessionId": { "$ref": "#/components/schemas/NullableString" },
+              "totalPrice": { "$ref": "#/components/schemas/Vnd" },
+              "paidAmount": { "$ref": "#/components/schemas/Vnd" },
+              "remainingAmount": { "$ref": "#/components/schemas/Vnd" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "x-callers": ["any-binding-holder"],
+        "responses": { "200": { "description": "Liveness", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } } } }
+      }
+    },
+    "/internal/v1/catalog": {
+      "get": {
+        "operationId": "getCatalog",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Master data: property, rooms, rate rules, booking rules, check-in slots, categories, active promotions (ETag = catalog domain version).",
+        "responses": {
+          "200": { "description": "Catalog", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Catalog" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/rate-rules/{rateRuleId}": {
+      "parameters": [{ "$ref": "#/components/parameters/RateRuleId" }],
+      "patch": {
+        "operationId": "updateRateRule",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "Change base price / extra-hour fee (optimistic expectedVersion). Affects new quotes only; bookings keep their price snapshot.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["expectedVersion"],
+                "properties": { "expectedVersion": { "type": "integer", "minimum": 1 }, "basePrice": { "type": "integer", "minimum": 0 }, "extraHourFee": { "type": "integer", "minimum": 0 } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated rate rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["rateRule"],
+                  "properties": {
+                    "rateRule": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["id", "roomClass", "ratePlanCode", "basePrice", "extraHourFee", "version"],
+                      "properties": {
+                        "id": { "type": "string" },
+                        "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+                        "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+                        "basePrice": { "type": "integer" },
+                        "extraHourFee": { "type": "integer" },
+                        "version": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/configs/{configKey}": {
+      "parameters": [{ "$ref": "#/components/parameters/ConfigKey" }],
+      "put": {
+        "operationId": "updateConfig",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "booking_rules (partial merge, unknown keys rejected) | hourly_checkin_slots.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["expectedVersion", "value"],
+                "properties": { "expectedVersion": { "type": "integer", "minimum": 1 }, "value": { "type": "object" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["key", "value", "version"],
+                  "properties": { "key": { "type": "string" }, "value": { "type": "object" }, "version": { "type": "integer" } }
+                }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/promotions": {
+      "get": {
+        "operationId": "listPromotions",
+        "x-callers": ["admin-bff"],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "enum": ["all", "active", "expired", "inactive", "archived"] } },
+          { "name": "categoryId", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Promotions (max 200)",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": false, "required": ["promotions"], "properties": { "promotions": { "type": "array", "items": { "$ref": "#/components/schemas/Promotion" } } } }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createPromotion",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "Create a promotion. Loyalty tier 'new' is accepted and stored as 'not_member'. Empty arrays mean no restriction.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "categoryId", "discountType", "discountValue"] } } } },
+        "responses": { "201": { "$ref": "#/components/responses/Promotion" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/promotions/public": {
+      "get": {
+        "operationId": "listPublicPromotions",
+        "x-callers": ["admin-bff", "agent-core", "landing-bff"],
+        "summary": "AI-8: public promotions that are active and not expired (what the AI receptionist may advertise; it applies them via applyPublicPromotions).",
+        "responses": {
+          "200": {
+            "description": "Public promotions (max 20)",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": false, "required": ["promotions"], "properties": { "promotions": { "type": "array", "items": { "$ref": "#/components/schemas/Promotion" } } } }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/promotions/validate": {
+      "post": {
+        "operationId": "validatePromotion",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Legacy-compatible eligibility check for a raw subtotal (business-date + rate-plan aware, tier via CDP when required).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["rawSubtotal"],
+                "properties": {
+                  "promotionId": { "type": "string" },
+                  "promotionCode": { "type": "string" },
+                  "rawSubtotal": { "type": "integer", "minimum": 0 },
+                  "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+                  "bookingType": { "$ref": "#/components/schemas/BookingType" },
+                  "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
+                  "checkinAt": { "$ref": "#/components/schemas/Instant" },
+                  "phone": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Eligibility", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PromotionValidation" } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/promotions/{promotionId}": {
+      "parameters": [{ "$ref": "#/components/parameters/PromotionId" }],
+      "get": {
+        "operationId": "getPromotion",
+        "x-callers": ["admin-bff"],
+        "responses": { "200": { "$ref": "#/components/responses/Promotion" }, "default": { "$ref": "#/components/responses/Error" } }
+      },
+      "patch": {
+        "operationId": "updatePromotion",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "Partial update incl. isActive toggle (expectedVersion). Existing bookings keep their promotion snapshot.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Promotion" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/promotions/{promotionId}/archive": {
+      "parameters": [{ "$ref": "#/components/parameters/PromotionId" }],
+      "post": {
+        "operationId": "archivePromotion",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "Soft archive (replaces legacy hard delete).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Promotion" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/promotion-categories": {
+      "get": {
+        "operationId": "listCategories",
+        "x-callers": ["admin-bff"],
+        "responses": {
+          "200": {
+            "description": "Categories with promoCount",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": false, "required": ["categories"], "properties": { "categories": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } } } }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createCategory",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "code"] } } } },
+        "responses": { "201": { "$ref": "#/components/responses/Category" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/promotion-categories/{categoryId}": {
+      "parameters": [{ "$ref": "#/components/parameters/CategoryId" }],
+      "patch": {
+        "operationId": "updateCategory",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Category" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/availability/search": {
+      "post": {
+        "operationId": "searchAvailability",
+        "x-callers": ["admin-bff", "agent-core", "landing-bff"],
+        "summary": "Every active room (optionally of one class) with availability, human-readable reasons and base price for a stay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["bookingType", "checkinAt", "checkoutAt"],
+                "properties": {
+                  "bookingType": { "$ref": "#/components/schemas/BookingType" },
+                  "checkinAt": { "$ref": "#/components/schemas/Instant" },
+                  "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+                  "earlyCheckinHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-in (dayuse: hours before the standard 15:00 → priced as extra hours). An explicit number, even 0, is respected (BUG-62)." },
+                  "lateCheckoutHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-out (dayuse: hours after the standard 12:00; overnight: hours beyond the 12 h combo). An explicit number, even 0, is respected (BUG-62)." },
+                  "numGuests": { "type": "integer" },
+                  "customPrice": { "type": "integer" },
+                  "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+                  "applyPublicPromotions": { "type": "boolean", "description": "AI-8: add price.promotion + price.total with the best eligible public promotion (tier-restricted ones are skipped — no phone here)." },
+                  "includeAddons": { "type": "boolean", "description": "LSB-1: overnight add-on buttons per room" },
+                  "includeShiftSummary": { "type": "boolean", "description": "LSB-1: free rooms per overnight shift" },
+                  "channel": { "enum": ["web", "admin", "chat"], "description": "web = self-booking rules enforced (landing-bff implies web)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Rooms", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AvailabilitySearch" } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/quotes": {
+      "post": {
+        "operationId": "quote",
+        "x-callers": ["admin-bff", "agent-core", "landing-bff"],
+        "summary": "Server-side quote for one room: base + promotion + ADVISORY loyalty preview (CDP loyalty-context). Degrades to available=false when CDP is down.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["roomId", "bookingType", "checkinAt", "checkoutAt"],
+                "properties": {
+                  "roomId": { "type": "string" },
+                  "bookingType": { "$ref": "#/components/schemas/BookingType" },
+                  "checkinAt": { "$ref": "#/components/schemas/Instant" },
+                  "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+                  "earlyCheckinHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-in (dayuse: hours before the standard 15:00 → priced as extra hours). An explicit number, even 0, is respected (BUG-62)." },
+                  "lateCheckoutHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-out (dayuse: hours after the standard 12:00; overnight: hours beyond the 12 h combo). An explicit number, even 0, is respected (BUG-62)." },
+                  "numGuests": { "type": "integer" },
+                  "customPrice": { "type": "integer" },
+                  "phone": { "type": "string" },
+                  "promotionId": { "type": "string" },
+                  "promotionCode": { "type": "string" },
+                  "applyPublicPromotions": { "type": "boolean", "description": "AI-8: without promotionId/promotionCode, apply the best eligible public promotion (tier from phone)." },
+                  "channel": { "enum": ["web", "admin", "chat"] },
+                  "voucherId": { "type": "string" },
+                  "voucherCode": { "type": "string" },
+                  "noVoucher": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Quote", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Quote" } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/holds": {
+      "post": {
+        "operationId": "createHold",
+        "x-callers": ["admin-bff", "agent-core"],
+        "x-idempotency": "required",
+        "summary": "Create a 15-minute room hold locking occupancy and turnover inventory slots.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["roomId", "bookingType", "checkinAt", "checkoutAt"],
+                "properties": {
+                  "roomId": { "type": "string" },
+                  "bookingType": { "$ref": "#/components/schemas/BookingType" },
+                  "checkinAt": { "$ref": "#/components/schemas/Instant" },
+                  "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+                  "earlyCheckinHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-in (dayuse: hours before the standard 15:00 → priced as extra hours). An explicit number, even 0, is respected (BUG-62)." },
+                  "lateCheckoutHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-out (dayuse: hours after the standard 12:00; overnight: hours beyond the 12 h combo). An explicit number, even 0, is respected (BUG-62)." },
+                  "numGuests": { "type": "integer" },
+                  "customPrice": { "type": "integer" },
+                  "ttlSeconds": { "type": "integer" },
+                  "channel": { "enum": ["web", "admin", "chat"] },
+                  "sessionId": { "type": "string", "description": "agent-core booking session id (agent-core only); such holds are SESSION_MANAGED" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/Hold" },
+          "200": { "$ref": "#/components/responses/Hold" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/holds/{holdId}": {
+      "parameters": [{ "$ref": "#/components/parameters/HoldId" }],
+      "get": {
+        "operationId": "getHold",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Get current hold status and remaining seconds.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Hold" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "patch": {
+        "operationId": "updateHoldDraft",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Validate and save guest & payment draft onto the active hold (transitions to awaiting_payment without resetting timer).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["guest", "closingNote"],
+                "properties": {
+                  "guest": { "type": "object" },
+                  "closingNote": { "type": "string" },
+                  "note": { "type": "string" },
+                  "promotionId": { "type": "string" },
+                  "promotionCode": { "type": "string" },
+                  "isDeposit": { "type": "boolean" },
+                  "depositAmount": { "type": "integer" },
+                  "depositDueDate": { "$ref": "#/components/schemas/BusinessDate" },
+                  "paymentMethod": { "$ref": "#/components/schemas/PaymentMethod" },
+                  "voucherId": { "type": "string", "description": "LSB-1b wallet voucher (needs guest.phone)" },
+                  "voucherCode": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Hold" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/holds/{holdId}/extend": {
+      "parameters": [{ "$ref": "#/components/parameters/HoldId" }],
+      "post": {
+        "operationId": "extendHold",
+        "x-callers": ["admin-bff", "agent-core"],
+        "x-idempotency": "required",
+        "summary": "Push a live hold's expiry later (quiet hours, OD-6). Exactly one of ttlSeconds / expiresAt; the new expiry must be in the future, ≤ now + 12h and ≤ checkinAt (else 422 HOLD_EXTEND_LIMIT with details.maxExpiresAt). A target at or before the current expiry is a no-op (extended=false).",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "ttlSeconds": { "type": "integer", "minimum": 60, "maximum": 43200, "description": "Seconds from now." },
+                  "expiresAt": { "type": "string", "description": "ISO-8601 instant with offset or Z." },
+                  "reason": { "type": "string", "maxLength": 200 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Hold" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/holds/{holdId}/release": {
+      "parameters": [{ "$ref": "#/components/parameters/HoldId" }],
+      "post": {
+        "operationId": "releaseHold",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Cancel the room hold and immediately free its inventory slots.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Hold" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/holds/{holdId}/confirm": {
+      "parameters": [{ "$ref": "#/components/parameters/HoldId" }],
+      "post": {
+        "operationId": "confirmHold",
+        "x-callers": ["admin-bff", "agent-core"],
+        "x-idempotency": "required",
+        "summary": "Atomically convert an active hold into a confirmed booking with financial ledger entry and CDP accrual.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "responses": {
+          "201": { "$ref": "#/components/responses/Booking" },
+          "200": { "$ref": "#/components/responses/Booking" },
+          "default": { "$ref": "#/components/responses/Error" }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paymentMethod": { "$ref": "#/components/schemas/PaymentMethod" },
+                  "paymentReference": { "type": "string" },
+                  "receivedAmount": { "type": "integer", "minimum": 0, "description": "LSB: money actually received; short → deposit, over → recorded as received" },
+                  "externalRef": { "type": "string", "description": "bank / gateway transaction id" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/v1/bookings": {
+      "get": {
+        "operationId": "listBookings",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Legacy filters + paging (pageSize ≤ 50), deterministic order, ETag on the bookings domain version.",
+        "parameters": [
+          { "name": "roomId", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "enum": ["all", "pending", "confirmed", "cancelled", "no_show"] } },
+          { "name": "depositStatus", "in": "query", "schema": { "enum": ["all", "none", "deposit_paid", "fully_paid"] } },
+          { "name": "bookingType", "in": "query", "schema": { "type": "string" } },
+          { "name": "loyaltySyncStatus", "in": "query", "schema": { "type": "string" } },
+          { "name": "createdBy", "in": "query", "schema": { "type": "string" } },
+          { "name": "date", "in": "query", "schema": { "$ref": "#/components/schemas/BusinessDate" } },
+          { "name": "createdFrom", "in": "query", "schema": { "$ref": "#/components/schemas/BusinessDate" } },
+          { "name": "createdTo", "in": "query", "schema": { "$ref": "#/components/schemas/BusinessDate" } },
+          { "name": "search", "in": "query", "schema": { "type": "string", "minLength": 3 } },
+          { "name": "sortBy", "in": "query", "schema": { "enum": ["checkin_at", "checkout_at", "created_at", "updated_at", "total_price", "status", "version", "mod_no"] } },
+          { "name": "sortDir", "in": "query", "schema": { "enum": ["ASC", "DESC", "asc", "desc"] } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BookingList" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createBooking",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "summary": "Create a manual booking: server pricing, atomic two-lane slot claim, promotion redemption (DB usage fence), optional deposit/payment ledger entries, CDP accrual (sync-first + outbox) — one D1 transaction.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["roomId", "bookingType", "checkinAt", "checkoutAt", "guest"],
+                "properties": {
+                  "roomId": { "type": "string" },
+                  "bookingType": { "$ref": "#/components/schemas/BookingType" },
+                  "checkinAt": { "$ref": "#/components/schemas/Instant" },
+                  "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+                  "earlyCheckinHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-in (dayuse: hours before the standard 15:00 → priced as extra hours). An explicit number, even 0, is respected (BUG-62)." },
+                  "lateCheckoutHours": { "type": "integer", "minimum": 0, "maximum": 24, "description": "Optional. OMITTED = derived from the exact check-out (dayuse: hours after the standard 12:00; overnight: hours beyond the 12 h combo). An explicit number, even 0, is respected (BUG-62)." },
+                  "numGuests": { "type": "integer" },
+                  "customPrice": { "type": "integer" },
+                  "status": { "enum": ["confirmed", "pending"] },
+                  "guest": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "instagram": { "type": "string" }, "facebook": { "type": "string" }, "zalo": { "type": "string" } }
+                  },
+                  "note": { "type": "string" },
+                  "closingNote": { "type": "string" },
+                  "promotionId": { "type": "string" },
+                  "promotionCode": { "type": "string" },
+                  "deposit": {
+                    "type": "object",
+                    "required": ["amount", "method"],
+                    "properties": { "amount": { "type": "integer" }, "method": { "$ref": "#/components/schemas/PaymentMethod" }, "reference": { "type": "string" }, "dueDate": { "$ref": "#/components/schemas/BusinessDate" } }
+                  },
+                  "payment": {
+                    "type": "object",
+                    "required": ["amount", "method"],
+                    "properties": { "amount": { "type": "integer" }, "method": { "$ref": "#/components/schemas/PaymentMethod" }, "reference": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/Booking" },
+          "200": { "$ref": "#/components/responses/Booking" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "get": {
+        "operationId": "getBooking",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Booking + ledger + CDP sync state + last 50 audit events (ETag = booking version).",
+        "responses": {
+          "200": { "description": "Detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BookingDetail" } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "patch": {
+        "operationId": "modifyBooking",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "summary": "Change room/time/type/guests/notes (expectedVersion). Moves inventory atomically, re-prices, re-evaluates the promotion snapshot (dropPromotion=true to remove it). Phone is immutable.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/extend": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "extendBooking",
+        "x-callers": ["admin-bff", "agent-core"],
+        "x-idempotency": "required",
+        "summary": "Extend checkout by `hours` (default 1, legacy extend1h): fee from the rate rule unless `feeOverride` (a price the quản lí approved), claims occupancy + turnover slots. Requires a staff actor — agent-core passes the approving staff member (Telegram) or the staff who granted the auto-approval (AI-7 OD-26); the AI bot actor (900001) gets 403 HUMAN_APPROVAL_REQUIRED.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" }, "hours": { "type": "integer", "minimum": 1, "maximum": 6 }, "feeOverride": { "type": "integer", "minimum": 0, "maximum": 20000000 }, "reason": { "type": "string", "maxLength": 200 } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/extend-quote": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "extendQuote",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "Read-only dry run of extend: availability of [checkout, checkout + hours] incl. the 60′ turnover before the next booking, the table fee, and the longest extension (1–6 h) that still fits.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "hours": { "type": "integer", "minimum": 1, "maximum": 6 } } } } } },
+        "responses": {
+          "200": { "description": "Dry-run result", "content": { "application/json": { "schema": { "type": "object", "required": ["bookingId", "hours", "available", "fee", "checkoutAt", "newCheckoutAt", "maxHours"], "properties": { "bookingId": { "type": "string" }, "roomId": { "type": "string" }, "roomClass": { "type": "string" }, "version": { "type": "integer" }, "hours": { "type": "integer" }, "available": { "type": "boolean" }, "conflict": { "type": ["object", "null"] }, "extraHourFee": { "type": "integer" }, "fee": { "type": "integer" }, "checkoutAt": { "type": "string" }, "newCheckoutAt": { "type": "string" }, "maxHours": { "type": "integer" }, "latestCheckoutAt": { "type": ["string", "null"] } } } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/adjust-quote": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BookingId"
+        }
+      ],
+      "post": {
+        "operationId": "adjustQuote",
+        "x-callers": [
+          "admin-bff",
+          "agent-core"
+        ],
+        "summary": "AI-12: read-only dry run of an early check-in (side=early) or late check-out (side=late) of 1–6 h on an existing overnight / dayuse booking: availability of the added window incl. the 60′ turnover (previous / next booking, blocks, holds), the table fee, the longest adjustment that fits, and the full booking for the quản lí card. 409 CHECKIN_PASSED when an early check-in is asked after the check-in time; 422 ADJUST_NOT_APPLICABLE for hourly / custom.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "side"
+                ],
+                "properties": {
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "early",
+                      "late"
+                    ]
+                  },
+                  "hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 6
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "bookingId",
+                    "side",
+                    "hours",
+                    "available",
+                    "fee",
+                    "checkinAt",
+                    "checkoutAt",
+                    "newCheckinAt",
+                    "newCheckoutAt",
+                    "maxHours",
+                    "booking"
+                  ],
+                  "properties": {
+                    "bookingId": {
+                      "type": "string"
+                    },
+                    "roomId": {
+                      "type": "string"
+                    },
+                    "roomClass": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer"
+                    },
+                    "side": {
+                      "type": "string"
+                    },
+                    "hours": {
+                      "type": "integer"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "conflict": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "extraHourFee": {
+                      "type": "integer"
+                    },
+                    "fee": {
+                      "type": "integer"
+                    },
+                    "checkinAt": {
+                      "type": "string"
+                    },
+                    "checkoutAt": {
+                      "type": "string"
+                    },
+                    "newCheckinAt": {
+                      "type": "string"
+                    },
+                    "newCheckoutAt": {
+                      "type": "string"
+                    },
+                    "maxHours": {
+                      "type": "integer"
+                    },
+                    "earliestCheckinAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "latestCheckoutAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "booking": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/adjust": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BookingId"
+        }
+      ],
+      "post": {
+        "operationId": "adjustBooking",
+        "x-callers": [
+          "admin-bff",
+          "agent-core"
+        ],
+        "x-idempotency": "required",
+        "summary": "AI-12: apply an early check-in (checkin_at earlier, early_checkin_hours +) or late check-out of 1–6 h: fee from the rate rule unless `feeOverride` (the price the quản lí approved, 0 = free), claims occupancy + turnover slots, recomputes the totals, audit BOOKING_ADJUSTED. Requires a HUMAN staff actor (the quản lí who approved on Telegram); the AI bot actor (900001) gets 403 HUMAN_APPROVAL_REQUIRED.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "expectedVersion",
+                  "side"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer"
+                  },
+                  "side": {
+                    "type": "string",
+                    "enum": [
+                      "early",
+                      "late"
+                    ]
+                  },
+                  "hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 6
+                  },
+                  "feeOverride": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 20000000
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Booking"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/confirm": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "confirmBooking",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "summary": "pending → confirmed; enqueues the CDP accrual (occurredAt = immutable booking.created_at).",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/cancel": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "cancelBooking",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "summary": "Soft cancel (replaces legacy hard delete): frees inventory, records CDP outcome for counted bookings (no loyalty reversal in mock-v1).",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" }, "reason": { "type": "string" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/no-show": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "markNoShow",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "summary": "confirmed → no_show before checkout; optional refund ≤ net received (ledger entry in the same transaction).",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["expectedVersion"],
+                "properties": {
+                  "expectedVersion": { "type": "integer" },
+                  "reason": { "type": "string" },
+                  "refund": { "type": "object", "required": ["amount", "method"], "properties": { "amount": { "type": "integer" }, "method": { "$ref": "#/components/schemas/PaymentMethod" }, "reference": { "type": "string" } } }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/deposit-reminder": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "markDepositReminder",
+        "x-callers": ["admin-bff"],
+        "summary": "Legacy mark_deposit_reminder_sent (expectedVersion; naturally idempotent).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/loyalty-sync": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "retryBookingLoyalty",
+        "x-callers": ["admin-bff"],
+        "summary": "Re-arms the guest's pending CDP commands (per-guest FIFO) and delivers them now. Safe to repeat (CDP is idempotent).",
+        "responses": {
+          "200": {
+            "description": "Booking + its CDP commands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["booking", "outbox"],
+                  "properties": { "booking": { "$ref": "#/components/schemas/Booking" }, "outbox": { "type": "array", "items": { "$ref": "#/components/schemas/OutboxItem" } } }
+                }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/financial-entries": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "get": {
+        "operationId": "listFinancialEntries",
+        "x-callers": ["admin-bff"],
+        "responses": {
+          "200": {
+            "description": "Ledger (append-only, chronological)",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": false, "required": ["entries"], "properties": { "entries": { "type": "array", "items": { "$ref": "#/components/schemas/FinancialEntry" } } } }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "recordFinancialEntry",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "x-required-role": "manager for entryType=adjustment",
+        "summary": "deposit | payment | refund (≤ net received) | adjustment (signed, manager, reason). Projection updated in the same transaction.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["entryType", "amount", "method"],
+                "properties": {
+                  "entryType": { "enum": ["deposit", "payment", "refund", "adjustment"] },
+                  "amount": { "type": "integer" },
+                  "method": { "$ref": "#/components/schemas/PaymentMethod" },
+                  "reference": { "type": "string" },
+                  "reason": { "type": "string" },
+                  "occurredAt": { "$ref": "#/components/schemas/Instant" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "$ref": "#/components/responses/Entry" }, "200": { "$ref": "#/components/responses/Entry" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/financial-entries/{entryId}/reverse": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }, { "$ref": "#/components/parameters/EntryId" }],
+      "post": {
+        "operationId": "reverseFinancialEntry",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "x-required-role": "manager",
+        "summary": "Correction by an opposite entry; each entry is reversible once (DB UNIQUE); reversals are not reversible.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string" } } } } } },
+        "responses": { "201": { "$ref": "#/components/responses/Entry" }, "200": { "$ref": "#/components/responses/Entry" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/gantt": {
+      "get": {
+        "operationId": "gantt",
+        "x-callers": ["admin-bff"],
+        "parameters": [
+          { "name": "date", "in": "query", "schema": { "$ref": "#/components/schemas/BusinessDate" } },
+          { "name": "month", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } }
+        ],
+        "responses": {
+          "200": { "description": "Rooms with live bookings and active blocks", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Gantt" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/daily-roster": {
+      "get": {
+        "operationId": "dailyRoster",
+        "x-callers": ["admin-bff"],
+        "parameters": [{ "name": "date", "in": "query", "schema": { "$ref": "#/components/schemas/BusinessDate" } }],
+        "responses": {
+          "200": { "description": "Check-ins / check-outs of the business date", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Roster" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/finance/revenue-matrix": {
+      "get": {
+        "operationId": "revenueMatrix",
+        "x-callers": ["admin-bff"],
+        "summary": "Room x month revenue pivot (manager role enforced server-side, 403 FORBIDDEN_ROLE otherwise). Revenue = SUM(total_price) of confirmed bookings grouped by the Asia/Ho_Chi_Minh month of checkin_at. Defaults to the current month + 3 preceding; max 24 months.",
+        "parameters": [
+          { "name": "from", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue matrix",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["from", "to", "months", "basis", "status", "rooms", "columnTotals", "grandTotal", "bookingCount"],
+                  "properties": {
+                    "from": { "type": "string" },
+                    "to": { "type": "string" },
+                    "months": { "type": "array", "items": { "type": "string" } },
+                    "basis": { "type": "string", "enum": ["checkin_at"] },
+                    "status": { "type": "string", "enum": ["confirmed"] },
+                    "rooms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["roomId", "roomNumber", "roomClass", "floor", "values", "total"],
+                        "properties": {
+                          "roomId": { "type": "string" },
+                          "roomNumber": { "type": "string" },
+                          "roomClass": { "type": "string" },
+                          "floor": { "type": "integer" },
+                          "values": { "type": "array", "items": { "type": "integer" } },
+                          "total": { "type": "integer" }
+                        }
+                      }
+                    },
+                    "columnTotals": { "type": "array", "items": { "type": "integer" } },
+                    "grandTotal": { "type": "integer" },
+                    "bookingCount": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/deposit-reminders": {
+      "get": {
+        "operationId": "depositReminders",
+        "x-callers": ["admin-bff"],
+        "parameters": [{ "name": "date", "in": "query", "schema": { "$ref": "#/components/schemas/BusinessDate" } }],
+        "responses": {
+          "200": {
+            "description": "Deposits due by the business date, not reminded since local midnight",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["reminders", "count", "today"],
+                  "properties": { "reminders": { "type": "array", "items": { "$ref": "#/components/schemas/Booking" } }, "count": { "type": "integer" }, "today": { "$ref": "#/components/schemas/BusinessDate" } }
+                }
+              }
+            }
+          },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/room-blocks": {
+      "get": {
+        "operationId": "listBlocks",
+        "x-callers": ["admin-bff"],
+        "parameters": [
+          { "name": "roomId", "in": "query", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "enum": ["active", "released", "all"] } },
+          { "name": "from", "in": "query", "schema": { "$ref": "#/components/schemas/Instant" } },
+          { "name": "to", "in": "query", "schema": { "$ref": "#/components/schemas/Instant" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Blocks (newest first, max 100)",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": false, "required": ["blocks"], "properties": { "blocks": { "type": "array", "items": { "$ref": "#/components/schemas/Block" } } } }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createBlock",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "summary": "Maintenance block: claims the occupancy lane only (may start exactly at a checkout).",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["roomId", "blockedFrom", "blockedTo"],
+                "properties": {
+                  "roomId": { "type": "string" },
+                  "blockedFrom": { "$ref": "#/components/schemas/Instant" },
+                  "blockedTo": { "$ref": "#/components/schemas/Instant" },
+                  "reason": { "type": "string" },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "$ref": "#/components/responses/Block" }, "200": { "$ref": "#/components/responses/Block" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/room-blocks/{blockId}": {
+      "parameters": [{ "$ref": "#/components/parameters/BlockId" }],
+      "patch": {
+        "operationId": "updateBlock",
+        "x-callers": ["admin-bff"],
+        "summary": "Reschedule / reason / note (expectedVersion); slots re-claimed atomically.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Block" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/room-blocks/{blockId}/release": {
+      "parameters": [{ "$ref": "#/components/parameters/BlockId" }],
+      "post": {
+        "operationId": "releaseBlock",
+        "x-callers": ["admin-bff"],
+        "summary": "Soft release (replaces legacy DELETE); frees the slots.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" }, "reason": { "type": "string" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Block" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/loyalty-outbox": {
+      "get": {
+        "operationId": "listOutbox",
+        "x-callers": ["admin-bff"],
+        "summary": "Reconciliation view of Booking → CDP commands (default status=dead).",
+        "parameters": [{ "name": "status", "in": "query", "schema": { "enum": ["pending", "processing", "dead", "done"] } }],
+        "responses": {
+          "200": {
+            "description": "Items + backlog summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["items", "summary"],
+                  "properties": {
+                    "items": { "type": "array", "items": { "$ref": "#/components/schemas/OutboxItem" } },
+                    "summary": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["status", "count", "oldestCreatedAt"],
+                        "properties": { "status": { "enum": ["pending", "processing", "dead"] }, "count": { "type": "integer" }, "oldestCreatedAt": { "$ref": "#/components/schemas/Instant" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/loyalty-outbox/{outboxId}/retry": {
+      "parameters": [{ "$ref": "#/components/parameters/OutboxId" }],
+      "post": {
+        "operationId": "retryOutbox",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "summary": "Re-arms a dead/pending command (attempts reset) and delivers the guest's queue now.",
+        "responses": {
+          "200": {
+            "description": "Command state after the attempt",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": false, "required": ["item"], "properties": { "item": { "$ref": "#/components/schemas/OutboxItem" } } }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/surcharge-rules": {
+      "get": {
+        "operationId": "listSurchargeRules",
+        "x-callers": ["admin-bff"],
+        "responses": {
+          "200": {
+            "description": "Surcharge rules list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["surchargeRules"],
+                  "properties": {
+                    "surchargeRules": { "type": "array", "items": { "$ref": "#/components/schemas/SurchargeRule" } }
+                  }
+                }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createSurchargeRule",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "responses": {
+          "201": { "$ref": "#/components/responses/SurchargeRule" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/surcharge-rules/{surchargeRuleId}": {
+      "parameters": [{ "$ref": "#/components/parameters/SurchargeRuleId" }],
+      "patch": {
+        "operationId": "updateSurchargeRule",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "responses": {
+          "200": { "$ref": "#/components/responses/SurchargeRule" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/surcharge-rules/{surchargeRuleId}/archive": {
+      "parameters": [{ "$ref": "#/components/parameters/SurchargeRuleId" }],
+      "post": {
+        "operationId": "archiveSurchargeRule",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "responses": {
+          "200": { "$ref": "#/components/responses/SurchargeRule" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/storefront": {
+      "get": {
+        "operationId": "getStorefront",
+        "x-callers": ["admin-bff", "agent-core", "landing-bff"],
+        "summary": "LSB-1 public storefront for guest self-booking (ETag = catalog version + VN date).",
+        "responses": {
+          "200": { "description": "Storefront", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Storefront" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/inventory/version": {
+      "get": {
+        "operationId": "getInventoryVersion",
+        "x-callers": ["admin-bff", "agent-core", "landing-bff"],
+        "summary": "LSB-1 bookings domain version (realtime change detector, 1 row).",
+        "responses": {
+          "200": { "description": "Version", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InventoryVersion" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/bookings/guest-lookup": {
+      "post": {
+        "operationId": "guestLookup",
+        "x-callers": ["admin-bff", "agent-core"],
+        "summary": "LSB-1 /checkin multi-key verification: phone + (booking id | EIPAY | social handle | check-in date + room).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone"],
+                "properties": {
+                  "phone": { "type": "string" },
+                  "bookingRef": { "type": "string" },
+                  "socialHandle": { "type": "string" },
+                  "checkinDate": { "$ref": "#/components/schemas/BusinessDate" },
+                  "roomNumber": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Matched booking (minimal, masked)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GuestLookup" } } } },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  }
+}
