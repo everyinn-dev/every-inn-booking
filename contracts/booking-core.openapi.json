@@ -943,6 +943,8 @@
           "depositPaidAt": { "$ref": "#/components/schemas/NullableInstant" },
           "depositReminderSentAt": { "$ref": "#/components/schemas/NullableInstant" },
           "remainingPaidAt": { "$ref": "#/components/schemas/NullableInstant" },
+          "channel": { "description": "LSB-5: booking-session channel (web | admin | chat); null for legacy bookings.", "$ref": "#/components/schemas/NullableString" },
+          "voucherCode": { "description": "LSB-5: stamp voucher redeemed on this booking.", "$ref": "#/components/schemas/NullableString" },
           "modNo": { "type": "integer", "description": "Legacy alias of version." },
           "version": { "type": "integer" }
         }
