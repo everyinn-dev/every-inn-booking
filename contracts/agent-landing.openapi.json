@@ -1,0 +1,354 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Every Inn agent-core — LandingApi (guest self-booking)",
+    "version": "agent-landing-v1",
+    "description": "LSB-2. Named WorkerEntrypoint `LandingApi` of everyinn-agent-core, reachable only through the Service Binding of every-inn-booking (`x-ei-caller: landing-bff`). No staff identity: the guest's capability is the session token (32 random bytes, base64url) — only its SHA-256 is stored. `x-ei-client-ip` carries the guest IP (hashed with a server pepper before storage, used for anti-abuse limits). Every write runs through the session's Durable Object (one writer per session) and is audited in session_events."
+  },
+  "servers": [{ "url": "https://agent-core.internal" }],
+  "x-callers-legend": { "landing-bff": "Public landing BFF (every-inn-booking / saigonliving) — every operation" },
+  "paths": {
+    "/internal/v1/web/sessions": {
+      "post": {
+        "operationId": "createWebSession",
+        "x-callers": ["landing-bff"],
+        "summary": "Hold a room for the guest (10 min, master data) and open a booking session. Double clicks (same clientNonce) replay the same session with a fresh token. 429 TOO_MANY_HOLDS above the per-IP limit; 409 AVAILABILITY_CHANGED when the room was just taken.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["token", "session"],
+                  "properties": { "token": { "type": "string" }, "replayed": { "type": "boolean" }, "session": { "$ref": "#/components/schemas/SessionView" } }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["roomId", "bookingType", "checkinAt", "checkoutAt", "numGuests", "clientNonce"],
+                "properties": {
+                  "roomId": { "type": "string" },
+                  "bookingType": { "enum": ["hourly", "overnight", "dayuse"] },
+                  "checkinAt": { "type": "string" },
+                  "checkoutAt": { "type": "string" },
+                  "earlyCheckinHours": { "type": "integer", "minimum": 0, "maximum": 6 },
+                  "lateCheckoutHours": { "type": "integer", "minimum": 0, "maximum": 6 },
+                  "numGuests": { "type": "integer", "minimum": 1 },
+                  "shift": { "type": "string" },
+                  "clientNonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,64}$" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/v1/web/sessions/{token}": {
+      "get": {
+        "operationId": "getWebSession",
+        "x-callers": ["landing-bff"],
+        "summary": "Current state (ETag = session version → 304).",
+        "responses": {
+          "304": { "description": "Not modified" },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "required": ["session"], "properties": { "session": { "$ref": "#/components/schemas/SessionView" } } }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "saveWebGuest",
+        "x-callers": ["landing-bff"],
+        "summary": "Guest info → Core hold draft (best public promotion or the guest's code, wallet voucher). 409 ANOTHER_SESSION_LIVE when this phone already holds another room.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "required": ["session"], "properties": { "session": { "$ref": "#/components/schemas/SessionView" } } }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["guest"],
+                "properties": {
+                  "guest": {
+                    "type": "object",
+                    "required": ["name", "phone"],
+                    "properties": {
+                      "name": { "type": "string" },
+                      "phone": { "type": "string" },
+                      "zalo": { "type": "string" },
+                      "instagram": { "type": "string" },
+                      "facebook": { "type": "string" },
+                      "note": { "type": "string" }
+                    }
+                  },
+                  "promotionCode": { "type": "string" },
+                  "voucherId": { "type": "string" },
+                  "noVoucher": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelWebSession",
+        "x-callers": ["landing-bff"],
+        "summary": "Guest cancels (after the confirmation sheet): the room goes back on sale immediately.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "required": ["session"], "properties": { "session": { "$ref": "#/components/schemas/SessionView" } } }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/internal/v1/web/sessions/{token}/live": {
+      "get": {
+        "operationId": "waitWebSession",
+        "x-callers": ["landing-bff"],
+        "summary": "Long-poll ≤ 25 s (?v=<version>&timeout=ms): 200 + session as soon as it changes, 304 on timeout.",
+        "responses": {
+          "304": { "description": "Unchanged within the timeout" },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "required": ["session"], "properties": { "session": { "$ref": "#/components/schemas/SessionView" } } }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/internal/v1/web/sessions/{token}/preview": {
+      "post": {
+        "operationId": "previewWebSession",
+        "x-callers": ["landing-bff"],
+        "summary": "Price preview while typing: phone → member tier + masked voucher wallet; promotion code check.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["pricing", "vouchers"],
+                  "properties": {
+                    "pricing": { "type": "object" },
+                    "member": { "type": ["object", "null"] },
+                    "vouchers": { "type": "array", "items": { "type": "object", "not": { "required": ["code"] } } }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "phone": { "type": "string" },
+                  "promotionCode": { "type": "string" },
+                  "voucherId": { "type": "string" },
+                  "noVoucher": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/v1/web/sessions/{token}/paid": {
+      "post": {
+        "operationId": "claimWebPaid",
+        "x-callers": ["landing-bff"],
+        "summary": "\"Tôi đã chuyển khoản\": the hold is extended (claim grace) and the quản lí gets a ping card with ✅ / ❌ / 💰.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "required": ["session"], "properties": { "session": { "$ref": "#/components/schemas/SessionView" } } }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "note": { "type": "string" } } } } }
+        }
+      }
+    },
+    "/internal/v1/web/checkin/lookup": {
+      "post": {
+        "operationId": "webCheckinLookup",
+        "x-callers": ["landing-bff"],
+        "summary": "/checkin: phone + one second key → the 4 guide blocks; codes only inside the release window. 5 failures / 15 min / IP → 429.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["booking", "accessCodes", "guideBlocks"],
+                  "properties": { "booking": { "type": "object" }, "accessCodes": { "type": "object" }, "guideBlocks": { "type": "object" } }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["phone", "secondKeyType"],
+                "properties": {
+                  "phone": { "type": "string" },
+                  "secondKeyType": { "enum": ["booking_ref", "social", "checkin_date_room"] },
+                  "secondKeyValue": { "type": "string" },
+                  "checkinDate": { "type": "string" },
+                  "roomNumber": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/v1/web/pulse": {
+      "get": {
+        "operationId": "waitInventoryPulse",
+        "x-callers": ["landing-bff"],
+        "summary": "Search-page realtime: long-poll the bookings version (?v=…); changed=true → re-run the search.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["version", "changed"],
+                  "properties": { "version": { "type": "integer" }, "changed": { "type": "boolean" } }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope {error:{code,message,request_id,details?}} — Vietnamese message, Cache-Control: private, no-store",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "request_id"],
+            "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "request_id": { "type": "string" }, "details": { "type": "object" } }
+          }
+        }
+      },
+      "SessionView": {
+        "type": "object",
+        "description": "LSB-2 booking session as the guest (or staff) sees it",
+        "required": ["ref", "channel", "status", "statusLabel", "room", "bookingType", "checkinAt", "checkoutAt", "numGuests", "expiresAt", "serverNow", "remainingSeconds", "amountDue", "paidAmount", "remaining", "version", "timeline", "can"],
+        "properties": {
+          "ref": { "type": "string" },
+          "channel": { "enum": ["web", "admin", "chat"] },
+          "status": { "type": "string" },
+          "statusLabel": { "type": "string" },
+          "room": { "type": "object" },
+          "bookingType": { "type": "string" },
+          "shift": { "type": ["string", "null"] },
+          "checkinAt": { "type": "string" },
+          "checkoutAt": { "type": "string" },
+          "earlyHours": { "type": "integer" },
+          "lateHours": { "type": "integer" },
+          "numGuests": { "type": "integer" },
+          "expiresAt": { "type": "string" },
+          "serverNow": { "type": "string" },
+          "remainingSeconds": { "type": "integer" },
+          "amountDue": { "type": "integer" },
+          "paidAmount": { "type": "integer" },
+          "remaining": { "type": "integer" },
+          "pricing": { "type": ["object", "null"] },
+          "guest": { "type": ["object", "null"] },
+          "payment": { "type": ["object", "null"] },
+          "bookingId": { "type": ["string", "null"] },
+          "can": { "type": "object" },
+          "timeline": { "type": "array", "items": { "type": "object" } },
+          "version": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

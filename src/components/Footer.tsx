@@ -37,6 +37,7 @@ export default function Footer() {
           >
             Google Maps
           </a>
+          <Link href="/checkin">🔑 Tra cứu mã phòng & hướng dẫn check-in</Link>
           <a href="tel:+840906314109">0906.314.109</a>
           <a href="mailto:hi.everyinn@gmail.com">hi.everyinn@gmail.com</a>
         </div>
