@@ -412,15 +412,22 @@ function GuestForm({ token, session, onSaved, say }: { token: string; session: S
 
 function PaymentPanel({ token, session: s, onUpdate, say, onEdit }: { token: string; session: SessionView; onUpdate: (s: SessionView) => void; say: (t: string) => void; onEdit: () => void }) {
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const p = s.payment;
   const rejected = useMemo(() => s.timeline.at(-1)?.event === "OWNER_REJECTED", [s.timeline]);
   const copy = async (label: string, v: string) => say((await copyText(v)) ? `Đã copy ${label}` : "Không copy được — giữ lâu để copy");
   const claim = async () => {
+    if (busyRef.current || busy) return;
+    busyRef.current = true;
     setBusy(true);
-    const r = await api<{ session: SessionView }>("POST", `/api/guest/sessions/${token}/paid`, {});
-    setBusy(false);
-    if (r.ok && r.data) onUpdate(r.data.session);
-    else say(r.error?.message ?? "Chưa gửi được, thử lại nhé.");
+    try {
+      const r = await api<{ session: SessionView }>("POST", `/api/guest/sessions/${token}/paid`, {});
+      if (r.ok && r.data) onUpdate(r.data.session);
+      else say(r.error?.message ?? "Chưa gửi được, thử lại nhé.");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
   return (
     <div className="bk-card">
@@ -428,7 +435,13 @@ function PaymentPanel({ token, session: s, onUpdate, say, onEdit }: { token: str
         {s.status === "underpaid" ? "Chuyển bù phần còn thiếu" : "Chuyển khoản để chốt phòng"}
       </h1>
       {s.status === "underpaid" ? <div className="bk-banner bk-banner-warn">Home đã nhận {vnd(s.paidAmount)}, còn thiếu <b>{vnd(s.remaining)}</b>. Bạn quét mã bên dưới để chuyển bù nhé.</div> : null}
-      {rejected ? <div className="bk-banner bk-banner-danger">Home chưa thấy tiền về tài khoản. Bạn kiểm tra lại giao dịch, chuyển lại nếu cần rồi bấm “Tôi đã chuyển lại”.</div> : null}
+      {rejected ? (
+        <div className="bk-banner bk-banner-danger">
+          {s.status === "underpaid"
+            ? "Home chưa thấy khoản tiền chuyển bù về tài khoản. Bạn kiểm tra lại giao dịch, chuyển lại nếu cần rồi bấm “Tôi đã chuyển bù”."
+            : "Home chưa thấy tiền về tài khoản. Bạn kiểm tra lại giao dịch, chuyển lại nếu cần rồi bấm “Tôi đã chuyển lại”."}
+        </div>
+      ) : null}
       {p ? (
         <>
           <div className="bk-qr" style={{ marginTop: 12 }}>
@@ -478,11 +491,19 @@ function PaymentPanel({ token, session: s, onUpdate, say, onEdit }: { token: str
 // ── Step 3 ──────────────────────────────────────────────────────────────────────────────────
 
 function Waiting({ session: s }: { session: SessionView }) {
+  const isTopup = s.paidAmount > 0;
   return (
     <div className="bk-card bk-wait" aria-live="polite">
       <div className="bk-pulse" aria-hidden />
-      <h1 className="bk-title">{s.status === "late_payment" ? "Home đang kiểm tra lại phòng cho bạn" : "Home đang đối soát chuyển khoản"}</h1>
+      <h1 className="bk-title">
+        {s.status === "late_payment"
+          ? "Home đang kiểm tra lại phòng cho bạn"
+          : isTopup
+            ? "Home đang đối soát phần chuyển bù"
+            : "Home đang đối soát chuyển khoản"}
+      </h1>
       <p className="bk-sub">Thường mất 30 giây – 2 phút. Trang sẽ tự chuyển khi Home xác nhận — bạn không cần tải lại.</p>
+      {isTopup ? <p className="bk-small bk-muted">Đã nhận: {vnd(s.paidAmount)} · Chuyển bù: {vnd(s.remaining)}</p> : null}
       <p className="bk-small bk-muted">Mã thanh toán: {s.payment?.reference ?? "—"}</p>
     </div>
   );
