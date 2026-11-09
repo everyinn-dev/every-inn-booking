@@ -79,12 +79,12 @@ export function defaultNightDate(nowMs = Date.now()): string {
 }
 export const isSmallHours = (nowMs = Date.now()) => Number(vnTime(nowMs).slice(0, 2)) < 5;
 
-/** Hourly start options (30-min steps) between the first and last check-in, ≥ now + lead on today. */
+/** Hourly start options (1-hour steps) between the first and last check-in, ≥ now + lead on today. */
 export function hourlyStarts(date: string, first: string, last: string, leadMinutes: number, nowMs = Date.now()): string[] {
   const out: string[] = [];
   const from = localMs(date, first);
   const to = localMs(date, last);
-  for (let t = from; t <= to; t += 30 * 60_000) if (t >= nowMs + leadMinutes * 60_000) out.push(vnTime(t));
+  for (let t = from; t <= to; t += 60 * 60_000) if (t >= nowMs + leadMinutes * 60_000) out.push(vnTime(t));
   return out;
 }
 

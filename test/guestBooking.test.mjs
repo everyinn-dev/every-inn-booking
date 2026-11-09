@@ -83,15 +83,19 @@ describe("search", () => {
     assert.equal(body.data.rooms.find((r) => r.room.id === "sig-202").available, false);
   });
 
-  it("dayuse is 15:00 → 12:00; hourly needs a :00/:30 start; bad input → 400", async () => {
+  it("dayuse is 15:00 → 12:00; hourly needs a :00 start (:30 rejected); bad input → 400", async () => {
     const d = nextNight();
     const out = new Date(Date.parse(`${d}T00:00:00+07:00`) + 2 * 86_400_000 + 7 * 3600_000).toISOString().slice(0, 10);
     await availability.POST(req("POST", "/api/guest/availability", { kind: "dayuse", date: d, out, guests: 2 }));
     const sent = calls.find((c) => c.path === "/internal/v1/availability/search").body;
     assert.equal(sent.checkinAt, new Date(`${d}T15:00:00+07:00`).toISOString());
     assert.equal(sent.checkoutAt, new Date(`${out}T12:00:00+07:00`).toISOString());
-    const bad = await availability.POST(req("POST", "/api/guest/availability", { kind: "hourly", date: d, start: "14:10", guests: 2 }));
-    assert.equal(bad.status, 400);
+    const badMinute = await availability.POST(req("POST", "/api/guest/availability", { kind: "hourly", date: d, start: "14:10", guests: 2 }));
+    assert.equal(badMinute.status, 400);
+    const badHalfHour = await availability.POST(req("POST", "/api/guest/availability", { kind: "hourly", date: d, start: "14:30", guests: 2 }));
+    assert.equal(badHalfHour.status, 400);
+    const goodHour = await availability.POST(req("POST", "/api/guest/availability", { kind: "hourly", date: d, start: "14:00", guests: 2 }));
+    assert.equal(goodHour.status, 200);
   });
 });
 
