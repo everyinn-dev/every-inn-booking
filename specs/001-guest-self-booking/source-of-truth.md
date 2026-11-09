@@ -46,6 +46,7 @@ Test phải bám cột “Thực tế”. Các endpoint ở cột spec cũ **kh�
 | `POST checkin/lookup` | `LOOKUP_RL` **5/60s / IP** (mọi lần thử) | **5 lần thử sai / 15 phút / IP** (`ckfail:<hash IP>`, `hitCounter`/`peekCounter`) | 429 `RATE_LIMIT_EXCEEDED` (`retryAfterSeconds: 900` ở lớp D1) |
 
 - **Spec “5 hold/10 phút/IP” không còn đúng**: thực tế 3/phút và tối đa 2 phiên sống cùng lúc.
+- **Luồng giữ phòng bằng SĐT (Phone-First Hold & 1-Click Switch, 2026-11-09)**: Khách bấm "Giữ phòng" được mở Sheet nhập SĐT trước khi tạo session. Hệ thống kiểm tra `phone_hash`: tối đa 1 phòng giữ cùng lúc / SĐT. Nếu SĐT đang giữ phòng khác, API trả về 409 `ANOTHER_SESSION_LIVE` kèm thông tin phòng đang giữ; UI hiển thị nút "Đổi sang phòng này" (`forceSwitch: true`) tự động giải phóng phòng cũ để nhận phòng mới, loại bỏ hoàn toàn tình trạng giữ phòng ảo và kẹt phòng do IP/NAT. SĐT được lưu trong `localStorage` và tự động điền sẵn ở trang Checkout.
 - Lookup: chỉ thất bại mới tăng bộ đếm D1; đã chặn thì kiểm tra trước khi tra cứu. Sai → `404 GUEST_LOOKUP_NO_MATCH` kèm `attemptsLeft`; thiếu khoá 2 → `400 SECOND_KEY_REQUIRED`; lỗi core → `503 LOOKUP_UNAVAILABLE`.
 - Bộ đếm D1 là cửa sổ trượt theo `windowSec`. Binding Workers là cửa sổ cố định 60s. Chưa kiểm chứng chi tiết reset.
 - Khoá IP lấy từ `clientIp(req)` ở BFF, chuyển sang agent-core qua `x-ei-client-ip` và băm trước khi lưu. Cần test giả mạo header (R-03).

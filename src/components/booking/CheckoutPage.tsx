@@ -237,7 +237,7 @@ function PriceLines({ s }: { s: SessionView }) {
 function GuestForm({ token, session, onSaved, say }: { token: string; session: SessionView; onSaved: (s: SessionView) => void; say: (t: string) => void }) {
   const g = session.guest;
   const [name, setName] = useState(g?.name ?? "");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("ei_guest_phone") : "") || g?.phone || "");
   const [zalo, setZalo] = useState("");
   const [social, setSocial] = useState(!!(g?.instagram || g?.facebook));
   const [ig, setIg] = useState(g?.instagram ?? "");

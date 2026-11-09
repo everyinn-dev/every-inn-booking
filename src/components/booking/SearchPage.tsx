@@ -14,6 +14,7 @@ import type { SearchResult, Storefront } from "@/shared/booking-kit/types";
 import { api, newNonce, readActiveHold, writeActiveHold, type ActiveHold } from "@/lib/booking/client";
 import SearchBar from "./SearchBar";
 import RoomResultCard, { displayTotal, type Addons } from "./RoomResultCard";
+import PhoneHoldModal, { type HoldConflict } from "./PhoneHoldModal";
 
 type Result = SearchResult & { criteria: SearchCriteria; shift: string | null };
 
@@ -29,6 +30,7 @@ export default function SearchPage() {
   const [selected, setSelected] = useState<string | null>(params.get("phong"));
   const [addons, setAddons] = useState<Record<string, Addons>>({});
   const [holding, setHolding] = useState(false);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [active, setActive] = useState<ActiveHold | null>(null);
@@ -133,27 +135,40 @@ export default function SearchPage() {
   const chosen = rooms.find((r) => r.room.id === selected && r.available) ?? null;
   const chosenAddons = (chosen && addons[chosen.room.id]) || { early: 0, late: 0 };
 
-  const hold = async () => {
-    if (!chosen || !result) return;
+  const handleHoldConfirm = async (phone: string, forceSwitch = false): Promise<{ ok: boolean; conflict?: HoldConflict; error?: string }> => {
+    if (!chosen || !result) return { ok: false, error: "Chưa chọn phòng." };
     setHolding(true);
     const r = await api<{ token: string; session: { room: { label: string }; expiresAt: string } }>("POST", "/api/guest/sessions", {
       ...result.criteria,
       roomId: chosen.room.id,
       early: chosenAddons.early,
       late: chosenAddons.late,
+      phone,
+      ...(forceSwitch ? { forceSwitch: true } : {}),
       clientNonce: newNonce(),
     });
     setHolding(false);
     if (r.ok && r.data) {
       writeActiveHold({ token: r.data.token, roomLabel: r.data.session.room.label, expiresAt: r.data.session.expiresAt });
       router.push(`/dat-phong/${r.data.token}`);
-      return;
+      return { ok: true };
+    }
+    if (r.error?.code === "ANOTHER_SESSION_LIVE" && r.error.details) {
+      const d = r.error.details as { existingRoomLabel?: string; remainingSeconds?: number };
+      return {
+        ok: false,
+        conflict: {
+          existingRoomLabel: d.existingRoomLabel ?? "phòng khác",
+          remainingSeconds: Number(d.remainingSeconds ?? 600),
+        },
+      };
     }
     setToast(r.error?.message ?? "Chưa giữ được phòng, bạn thử lại nhé.");
     if (r.error?.code === "AVAILABILITY_CHANGED" || r.status === 409) {
       setSelected(null);
       search(result.criteria, { silent: true });
     }
+    return { ok: false, error: r.error?.message ?? "Chưa giữ được phòng, bạn thử lại nhé." };
   };
 
   const stayText = result
@@ -237,12 +252,21 @@ export default function SearchPage() {
                 {chosenAddons.late ? ` · +${chosenAddons.late}h muộn` : ""} · tạm tính
               </span>
             </div>
-            <button type="button" className="bk-btn bk-btn-primary" onClick={hold} disabled={holding}>
+            <button type="button" className="bk-btn bk-btn-primary" onClick={() => setShowPhoneModal(true)} disabled={holding}>
               {holding ? "Đang giữ…" : "Giữ phòng 10 phút"}
             </button>
           </div>
         </div>
       ) : null}
+      <PhoneHoldModal
+        open={showPhoneModal}
+        room={chosen}
+        addons={chosenAddons}
+        staySubtitle={result ? stayLabel({ bookingType: result.criteria.kind, shift: result.shift, checkinAt: result.checkinAt, checkoutAt: result.checkoutAt }) : ""}
+        total={chosen ? displayTotal(chosen, chosenAddons) : 0}
+        onClose={() => setShowPhoneModal(false)}
+        onConfirm={handleHoldConfirm}
+      />
       {toast ? (
         <div className="bk-toast" role="status">
           {toast}
