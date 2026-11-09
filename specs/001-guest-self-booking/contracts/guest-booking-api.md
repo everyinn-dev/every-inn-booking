@@ -8,6 +8,9 @@
   - Success: `{ "ok": true, "data": { ... }, "requestId": "<uuid>" }`
   - Error: `{ "ok": false, "error": { "code": "<UPPER_SNAKE>", "message": "<human Vietnamese>", "details"?: { ... } }, "requestId": "<uuid>" }`
 
+> [!IMPORTANT]
+> **CANONICAL ALIGNMENT (2026-11-09)**: Hệ thống triển khai thực tế sử dụng kiến trúc Session Engine an toàn (`/api/guest/sessions`, `/dat-phong/<token>`, long-poll DO 25s, `ss:<sid>:...`). Xem bảng ánh xạ endpoint và source of truth tại [source-of-truth.md](../source-of-truth.md).
+
 ---
 
 ## 1. Public Guest BFF Endpoints (`every-inn-booking`)

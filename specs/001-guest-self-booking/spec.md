@@ -8,11 +8,15 @@
 - **Status**: Approved for Implementation
 - **Methodology**: [GitHub Spec-Kit (`github/spec-kit`)](https://github.com/github/spec-kit)
 - **Related Canonical Docs**:
+  - `every-inn-booking/specs/001-guest-self-booking/source-of-truth.md` (Highest Precedence)
   - `everyinn-platform-docs/CONVENTIONS.md`
   - `everyinn-platform-docs/EI_LANDING_SELF_BOOKING_SPEC.md`
   - `everyinn-platform-docs/EI_PRICING_AND_SURCHARGE_SPEC.md`
   - `everyinn-platform-docs/rules/cloudflare-free-tier.md`
   - `everyinn-platform-docs/skills/ui-ux/SKILL.md`
+
+> [!IMPORTANT]
+> **CANONICAL ALIGNMENT (2026-11-09)**: Xem [source-of-truth.md](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/every-inn-booking/specs/001-guest-self-booking/source-of-truth.md) để đối chiếu trực tiếp với mã nguồn đang chạy (bước giờ nhận phòng 1 giờ chẵn `:00`, API Session Engine `/api/guest/sessions`, `/dat-phong/<token>`, rate limits, và logic trần giảm giá stacking).
 
 ---
 

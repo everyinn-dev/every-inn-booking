@@ -4,7 +4,7 @@ import type { Storefront } from "@/shared/booking-kit/types";
 import { BffError } from "./bff";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const HHMM = /^([01]\d|2[0-3]):[03]0$/;
+const HHMM = /^([01]\d|2[0-3]):00$/;
 
 export function parseCriteria(body: Record<string, unknown>): SearchCriteria {
   const kind = body.kind;
@@ -16,7 +16,7 @@ export function parseCriteria(body: Record<string, unknown>): SearchCriteria {
   const c: SearchCriteria = { kind, date, guests };
   if (kind === "overnight") c.shift = typeof body.shift === "string" ? body.shift.slice(0, 8) : undefined;
   if (kind === "hourly") {
-    if (!HHMM.test(String(body.start ?? ""))) throw new BffError(400, "VALIDATION_FAILED", "Chọn giờ nhận phòng.");
+    if (!HHMM.test(String(body.start ?? ""))) throw new BffError(400, "VALIDATION_FAILED", "Chọn giờ nhận phòng (bắt đầu vào đầu mỗi tiếng chẵn :00).");
     c.start = String(body.start);
     const hours = Number(body.hours ?? 3);
     if (!Number.isInteger(hours) || hours < 3 || hours > 12) throw new BffError(400, "VALIDATION_FAILED", "Thời lượng từ 3 đến 12 giờ.");
