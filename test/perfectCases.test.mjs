@@ -144,4 +144,26 @@ describe("Self-Booking Perfect Cases", () => {
     // Signature base 620k + (2+1)*60k = 800k
     assert.equal(s.amountDue, 620000 + 3 * 60000);
   });
+
+  it("P7: Phone-First Booking & Session Switch Flow (Hold with Phone -> Conflict -> Force Switch)", async () => {
+    const night = nextNight(12);
+    // 1. Hold with phone
+    const res1 = await sessions.POST(req("POST", "/api/guest/sessions", { kind: "overnight", date: night, shift: "22-10", guests: 2, roomId: "sig-102", phone: "0906314109", clientNonce: "perf-p7-001" }));
+    assert.equal(res1.status, 201);
+    const { session: s1 } = (await res1.json()).data;
+    assert.ok(s1.guest?.phoneMasked);
+
+    // 2. Conflict when phone has live session
+    const res2 = await sessions.POST(req("POST", "/api/guest/sessions", { kind: "overnight", date: night, shift: "21-9", guests: 2, roomId: "haven-101", phone: "0909999999", clientNonce: "perf-p7-002" }));
+    assert.equal(res2.status, 409);
+    const errBody = await res2.json();
+    assert.equal(errBody.error?.code, "ANOTHER_SESSION_LIVE");
+    assert.equal(errBody.error?.details?.existingRoomLabel, "Haven 101");
+
+    // 3. Force switch to new room
+    const res3 = await sessions.POST(req("POST", "/api/guest/sessions", { kind: "overnight", date: night, shift: "21-9", guests: 2, roomId: "haven-101", phone: "0909999999", forceSwitch: true, clientNonce: "perf-p7-003" }));
+    assert.equal(res3.status, 201);
+    const { session: s3 } = (await res3.json()).data;
+    assert.equal(s3.room.id, "haven-101");
+  });
 });

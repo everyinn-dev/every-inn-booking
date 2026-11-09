@@ -16,6 +16,8 @@ export async function POST(req: Request) {
     if (!/^[a-z]{3,9}-\d{3}$/.test(roomId)) throw new BffError(400, "VALIDATION_FAILED", "Chọn phòng.");
     const nonce = String(body.clientNonce ?? "");
     if (!/^[A-Za-z0-9_-]{8,64}$/.test(nonce)) throw new BffError(400, "VALIDATION_FAILED", "Yêu cầu không hợp lệ.");
+    const phone = typeof body.phone === "string" ? body.phone.trim() : null;
+    const forceSwitch = Boolean(body.forceSwitch);
     const sf = (await storefront(g.env)).value;
     const stay = criteriaStay(c, sf, { early: Number(body.early ?? 0), late: Number(body.late ?? 0) });
     const r = await agent(g.env, req, "POST", "/internal/v1/web/sessions", {
@@ -28,6 +30,8 @@ export async function POST(req: Request) {
       numGuests: c.guests,
       ...(stay.shift ? { shift: stay.shift } : {}),
       clientNonce: nonce,
+      ...(phone ? { phone } : {}),
+      ...(forceSwitch ? { forceSwitch: true } : {}),
     });
     return ok(r.data, requestId, r.status);
   } catch (err) {

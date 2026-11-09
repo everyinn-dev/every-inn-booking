@@ -142,6 +142,9 @@ export function mockAgentCore(): Fetcher {
       if (u.pathname === `${B}/sessions` && m === "POST") {
         const b = (await req.json()) as J;
         if (b.roomId === "sig-202") return err(409, "AVAILABILITY_CHANGED", "Phòng vừa có khách khác giữ.");
+        if (b.phone === "0909999999" && !b.forceSwitch) {
+          return json({ error: { code: "ANOTHER_SESSION_LIVE", message: "Số điện thoại đang giữ phòng khác.", details: { existingRoomLabel: "Haven 101", remainingSeconds: 360 } } }, 409);
+        }
         const token = `tok${crypto.randomUUID().replace(/-/g, "")}${"x".repeat(8)}`;
         const r = rooms.find((x) => x.id === b.roomId)!;
         const amount = base[r.roomClass]![String(b.bookingType)]! + (Number(b.earlyCheckinHours ?? 0) + Number(b.lateCheckoutHours ?? 0)) * 60000;
@@ -164,7 +167,7 @@ export function mockAgentCore(): Fetcher {
           paidAmount: 0,
           reference: `EIPAY${today().replace(/-/g, "").slice(2)}W9X4`,
           pricing: { basePrice: amount, subtotal: amount, promotion: null, voucher: null, total: amount, payable: amount, isDeposit: false },
-          guest: null,
+          guest: b.phone ? { name: null, phoneMasked: "+84 90 *** 4109", phone: b.phone } : null,
           bookingId: null,
           timeline: [{ event: "HOLD_CREATED", label: "Đã giữ phòng cho bạn", at: new Date().toISOString() }],
           version: 1,
