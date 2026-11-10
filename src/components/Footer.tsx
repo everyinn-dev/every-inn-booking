@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { LOGO_URL } from '@/data/rooms';
 
-export default function Footer() {
+export default function Footer({ showSelfBooking = false }: { showSelfBooking?: boolean }) {
   return (
     <footer className="site-footer" role="contentinfo">
       <div className="container footer-inner">
@@ -37,7 +37,7 @@ export default function Footer() {
           >
             Google Maps
           </a>
-          <Link href="/checkin">🔑 Tra cứu mã phòng & hướng dẫn check-in</Link>
+          {showSelfBooking && <Link href="/checkin">🔑 Tra cứu mã phòng & hướng dẫn check-in</Link>}
           <a href="tel:+840906314109">0906.314.109</a>
           <a href="mailto:hi.everyinn@gmail.com">hi.everyinn@gmail.com</a>
         </div>

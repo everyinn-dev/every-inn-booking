@@ -39,13 +39,16 @@
         "upload_source_maps": false,
 	// Production CDP_CORE binding (Phase 1.5, P-3 / S6).
 	// LSB-3 guest self-booking: BOOKING_CORE (read-only storefront, caller landing-bff) + AGENT_CORE entrypoint
-	// LandingApi (booking sessions, /checkin). Prod keeps WEB_BOOKING_ENABLED=false until the owner approves (R6).
+	// LandingApi (booking sessions, /checkin). Prod keeps WEB_BOOKING_ENABLED=false and LOYALTY_ENABLED=false until owner approves (R6 / D-02).
 	"services": [
 		{ "binding": "CDP_CORE", "service": "everyinn-cdp-core" },
 		{ "binding": "BOOKING_CORE", "service": "everyinn-booking-core" },
 		{ "binding": "AGENT_CORE", "service": "everyinn-agent-core", "entrypoint": "LandingApi" }
 	],
-	"vars": { "WEB_BOOKING_ENABLED": "false" },
+	"vars": {
+		"WEB_BOOKING_ENABLED": "false",
+		"LOYALTY_ENABLED": "false"
+	},
 	// Workers Rate Limiting (per IP, short windows; long windows live in agent-core D1 — D4)
 	"ratelimits": [
 		{ "name": "SEARCH_RL", "namespace_id": "4101", "simple": { "limit": 30, "period": 60 } },
@@ -64,7 +67,10 @@
 				{ "binding": "BOOKING_CORE", "service": "everyinn-booking-core-dev" },
 				{ "binding": "AGENT_CORE", "service": "everyinn-agent-core-dev", "entrypoint": "LandingApi" }
 			],
-			"vars": { "WEB_BOOKING_ENABLED": "true" },
+			"vars": {
+				"WEB_BOOKING_ENABLED": "true",
+				"LOYALTY_ENABLED": "true"
+			},
 			"ratelimits": [
 				{ "name": "SEARCH_RL", "namespace_id": "4201", "simple": { "limit": 30, "period": 60 } },
 				{ "name": "HOLD_RL", "namespace_id": "4202", "simple": { "limit": 3, "period": 60 } },

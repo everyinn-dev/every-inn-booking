@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SearchPage from "@/components/booking/SearchPage";
-import BookingDisabled from "@/components/booking/Disabled";
 import { webBookingEnabled } from "@/lib/server/bff";
 
 export const dynamic = "force-dynamic";
@@ -14,18 +14,14 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  const enabled = await webBookingEnabled();
+  if (!(await webBookingEnabled())) notFound();
   return (
     <>
-      <Header />
-      {enabled ? (
-        <Suspense fallback={<main className="bk-page" />}>
-          <SearchPage />
-        </Suspense>
-      ) : (
-        <BookingDisabled />
-      )}
-      <Footer />
+      <Header showSelfBooking={true} />
+      <Suspense fallback={<main className="bk-page" />}>
+        <SearchPage />
+      </Suspense>
+      <Footer showSelfBooking={true} />
     </>
   );
 }

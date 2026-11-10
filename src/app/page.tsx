@@ -6,20 +6,24 @@ import LoyaltyLookup from '../components/LoyaltyLookup';
 import Location from '../components/Location';
 import Footer from '../components/Footer';
 import HomeBooking from '../components/booking/HomeBooking';
+import { loyaltyEnabled, webBookingEnabled } from '../lib/server/bff';
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const [bookingOn, loyaltyOn] = await Promise.all([webBookingEnabled(), loyaltyEnabled()]);
   return (
     <>
-      <Header />
+      <Header showSelfBooking={bookingOn} />
       <Hero />
-      {/* LSB-4: client widget, hides itself while WEB_BOOKING_ENABLED=false (the home page stays static) */}
-      <HomeBooking />
+      {/* LSB-4: omitted completely when WEB_BOOKING_ENABLED=false so prod guests see no self-booking UI */}
+      {bookingOn && <HomeBooking />}
       <Rooms />
       <Pricing />
-      {/* Loyalty lookup: interactive on dev, Coming Soon teaser mode on production pending owner reward rules (D-02 / P-5). */}
-      <LoyaltyLookup comingSoon={false} />
+      {/* Loyalty lookup: interactive when LOYALTY_ENABLED=true (dev), Coming Soon teaser mode when false (prod). */}
+      <LoyaltyLookup comingSoon={!loyaltyOn} />
       <Location />
-      <Footer />
+      <Footer showSelfBooking={bookingOn} />
     </>
   );
 }

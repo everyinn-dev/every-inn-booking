@@ -11,6 +11,9 @@ import RoomCard from '../../../components/RoomCard';
 import { AreaIcon, GuestsIcon, FloorIcon, BedIcon, CheckIcon } from '../../../components/Icons';
 import { ROOMS, getRoomById, getRoomsByClass } from '../../../data/rooms';
 import { getEffectivePrices, getCheapestPrice, PRICE_MANAGER, fmtVND } from '../../../data/pricing';
+import { webBookingEnabled } from '../../../lib/server/bff';
+
+export const dynamic = "force-dynamic";
 
 export async function generateStaticParams() {
   return ROOMS.map((room) => ({
@@ -81,6 +84,7 @@ export default async function RoomDetailPage({
   const relatedRooms = getRoomsByClass(room.class).filter((r) => r.id !== room.id);
   const pricing = getEffectivePrices(room.priceClass);
   const carouselImages = room.images.gallery?.length ? room.images.gallery : [room.images.hero];
+  const bookingOn = await webBookingEnabled();
 
   const roomSchema = {
     '@context': 'https://schema.org',
@@ -155,7 +159,7 @@ export default async function RoomDetailPage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
 
-      <Header />
+      <Header showSelfBooking={bookingOn} />
 
       <main id="room-detail-main">
         {/* Breadcrumb */}
@@ -247,7 +251,7 @@ export default async function RoomDetailPage({
         )}
       </main>
 
-      <Footer />
+      <Footer showSelfBooking={bookingOn} />
     </>
   );
 }

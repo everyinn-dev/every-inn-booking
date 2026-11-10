@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import CheckoutPage from "@/components/booking/CheckoutPage";
-import BookingDisabled from "@/components/booking/Disabled";
 import { bffEnv, TOKEN_RE, webBookingEnabled } from "@/lib/server/bff";
 import type { SessionView } from "@/shared/booking-kit/types";
 
@@ -24,11 +24,11 @@ async function initialSession(token: string): Promise<SessionView | null> {
 
 export default async function Page({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  if (!(await webBookingEnabled())) return (<><Header /><BookingDisabled /></>);
+  if (!(await webBookingEnabled())) notFound();
   const initial = await initialSession(token);
   return (
     <>
-      <Header />
+      <Header showSelfBooking={true} />
       <CheckoutPage token={token} initial={initial} />
     </>
   );

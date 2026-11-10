@@ -11,6 +11,7 @@ export interface BffEnv {
   BOOKING_CORE?: Fetcher;
   AGENT_CORE?: Fetcher;
   WEB_BOOKING_ENABLED?: string;
+  LOYALTY_ENABLED?: string;
   SEARCH_RL?: RateLimit;
   HOLD_RL?: RateLimit;
   PAID_RL?: RateLimit;
@@ -41,7 +42,13 @@ export async function bffEnv(): Promise<BffEnv> {
 export async function webBookingEnabled(): Promise<boolean> {
   const env = await bffEnv();
   const flag = env.WEB_BOOKING_ENABLED ?? (typeof process !== "undefined" ? process.env?.WEB_BOOKING_ENABLED : undefined);
-  return flag !== "false";
+  return flag === "true";
+}
+
+export async function loyaltyEnabled(): Promise<boolean> {
+  const env = await bffEnv();
+  const flag = env.LOYALTY_ENABLED ?? (typeof process !== "undefined" ? process.env?.LOYALTY_ENABLED : undefined);
+  return flag === "true";
 }
 
 export class BffError extends Error {
@@ -91,7 +98,7 @@ function sameOrigin(req: Request): boolean {
 export async function guard(req: Request, limiter?: "SEARCH_RL" | "HOLD_RL" | "PAID_RL" | "LOOKUP_RL", key?: string): Promise<{ env: BffEnv; requestId: string }> {
   const requestId = crypto.randomUUID();
   const env = await bffEnv();
-  if (!(await webBookingEnabled())) throw new BffError(503, "FEATURE_DISABLED", "Đặt phòng online sắp mở. Bạn nhắn Instagram Every Inn để đặt nhé!");
+  if (!(await webBookingEnabled())) throw new BffError(503, "FEATURE_DISABLED", "Đặt phòng trực tuyến hiện chưa mở. Bạn nhắn Instagram Every Inn để đặt nhé!");
   if (req.method !== "GET" && !sameOrigin(req)) throw new BffError(403, "FORBIDDEN", "Yêu cầu không hợp lệ.");
   const rl = limiter ? env[limiter] : undefined;
   if (rl) {

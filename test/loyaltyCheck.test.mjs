@@ -61,24 +61,26 @@ test("Landing loyalty check: invalid phone format or length returns 400 invalid_
   }
 });
 
-test("Landing loyalty check: feature disabled returns 503", async () => {
-  setTestEnv({ LOYALTY_ENABLED: "false" });
-  const req = new Request("http://localhost:3000/api/loyalty/check", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      origin: "http://localhost:3000",
-    },
-    body: JSON.stringify({ phone: "0901234567" }),
-  });
-  const res = await POST(req);
-  assert.equal(res.status, 503);
-  const data = await res.json();
-  assert.equal(data.error, "feature_disabled");
+test("Landing loyalty check: feature disabled or unset returns 503", async () => {
+  for (const envCase of [{ LOYALTY_ENABLED: "false" }, { CDP_CORE: new FakeCdp(async () => ({ status: 200, body: { found: false } })) }]) {
+    setTestEnv(envCase);
+    const req = new Request("http://localhost:3000/api/loyalty/check", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:3000",
+      },
+      body: JSON.stringify({ phone: "0901234567" }),
+    });
+    const res = await POST(req);
+    assert.equal(res.status, 503);
+    const data = await res.json();
+    assert.equal(data.error, "feature_disabled");
+  }
 });
 
 test("Landing loyalty check: missing CDP binding returns degraded 503", async () => {
-  setTestEnv({ CDP_CORE: undefined });
+  setTestEnv({ LOYALTY_ENABLED: "true", CDP_CORE: undefined });
   const req = new Request("http://localhost:3000/api/loyalty/check", {
     method: "POST",
     headers: {
@@ -127,7 +129,7 @@ test("Landing loyalty check: valid phone found returns 200 with masked profile",
     };
   });
 
-  setTestEnv({ CDP_CORE: fakeCdp });
+  setTestEnv({ LOYALTY_ENABLED: "true", CDP_CORE: fakeCdp });
 
   const req = new Request("http://localhost:3000/api/loyalty/check", {
     method: "POST",
@@ -155,7 +157,7 @@ test("Landing loyalty check: valid phone not found returns 200 with found: false
     };
   });
 
-  setTestEnv({ CDP_CORE: fakeCdp });
+  setTestEnv({ LOYALTY_ENABLED: "true", CDP_CORE: fakeCdp });
 
   const req = new Request("http://localhost:3000/api/loyalty/check", {
     method: "POST",
@@ -177,7 +179,7 @@ test("Landing loyalty check: CDP error or timeout returns degraded 503", async (
     return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
   });
 
-  setTestEnv({ CDP_CORE: fakeCdp });
+  setTestEnv({ LOYALTY_ENABLED: "true", CDP_CORE: fakeCdp });
 
   const req = new Request("http://localhost:3000/api/loyalty/check", {
     method: "POST",
@@ -201,7 +203,7 @@ test("Landing loyalty check: CDP rate limited returns 429", async () => {
     return new Response(JSON.stringify({ error: "Too Many Requests" }), { status: 429 });
   });
 
-  setTestEnv({ CDP_CORE: fakeCdp });
+  setTestEnv({ LOYALTY_ENABLED: "true", CDP_CORE: fakeCdp });
 
   const req = new Request("http://localhost:3000/api/loyalty/check", {
     method: "POST",

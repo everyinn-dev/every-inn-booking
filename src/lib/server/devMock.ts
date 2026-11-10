@@ -251,5 +251,5 @@ export function mockAgentCore(): Fetcher {
 }
 
 export function mockBffEnv() {
-  return { BOOKING_CORE: mockBookingCore(), AGENT_CORE: mockAgentCore(), WEB_BOOKING_ENABLED: "true" };
+  return { BOOKING_CORE: mockBookingCore(), AGENT_CORE: mockAgentCore(), WEB_BOOKING_ENABLED: "true", LOYALTY_ENABLED: "true" };
 }

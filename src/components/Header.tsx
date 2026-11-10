@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LOGO_URL } from '@/data/rooms';
 
-export default function Header() {
+export default function Header({ showSelfBooking = false }: { showSelfBooking?: boolean }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
 
@@ -50,11 +50,11 @@ export default function Header() {
         </Link>
 
         <nav id="nav-links" className={`nav-links ${isNavOpen ? 'is-open' : ''}`} aria-label="Menu chính">
-          <Link href="/dat-phong" onClick={closeNav}>Đặt phòng</Link>
+          {showSelfBooking && <Link href="/dat-phong" onClick={closeNav}>Đặt phòng</Link>}
           <Link href="/#rooms" onClick={closeNav}>Hạng phòng</Link>
           <Link href="/#pricing" onClick={closeNav}>Bảng giá</Link>
           <Link href="/#location" onClick={closeNav}>Vị trí</Link>
-          <Link href="/checkin" onClick={closeNav}>🔑 Tra cứu check-in</Link>
+          {showSelfBooking && <Link href="/checkin" onClick={closeNav}>🔑 Tra cứu check-in</Link>}
           <a
             href="https://www.instagram.com/everyinn.home/"
             target="_blank"
