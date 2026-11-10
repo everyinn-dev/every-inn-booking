@@ -1,142 +1,116 @@
 # Tasks: Guest Self-Booking, Payment & Self Check-in Landing Page
 
-- **Input**: Design documents from `specs/001-guest-self-booking/` (`spec.md`, `plan.md`, `data-model.md`, `contracts/guest-booking-api.md`)
-- **Version**: 2.0.0 (Updated to Core Pricing v2.0, Real-world Operational Metrics & Edge Security)
-- **Methodology**: GitHub Spec-Kit (`[ID] [P?] [Story] Description with exact file path`)
-  - `[P]`: Có thể thực thi song song (khác file, không phụ thuộc chéo)
-  - `[US1]`..`[US6]`: Liên kết trực tiếp với User Story trong `spec.md`
+- **Branch**: `feat/landing-self-booking` (Spec-Kit `001-guest-self-booking`)
+- **Version**: 3.0.0 (Aligned 100% with [source-of-truth.md](./source-of-truth.md) and actual codebase)
+- **Last Updated**: 2026-11-10
+- **Input Docs**: [spec.md](./spec.md) · [plan.md](./plan.md) · [data-model.md](./data-model.md) · [contracts/guest-booking-api.md](./contracts/guest-booking-api.md)
 
 ---
 
-## Progress & Bug Log (implementation, 2026-11-08)
+## Tổng quan Tiến độ (`LSB-0` .. `LSB-10` + QA Fixes)
 
-The phases below are the original spec-kit breakdown. What was actually built, and where it deliberately differs
-(IDs, migrations 0010/0011/0021/0004, session engine in agent-core, voucher wallet, admin on the same engine), is in
-`everyinn-platform-docs/EI_LANDING_SELF_BOOKING_SPEC.md` §9 and `EI_PHASE1_STATUS.md` §4.6 (`LSB-*`).
+Tính năng Landing Self-Booking & Session Engine thống nhất đã triển khai hoàn chỉnh mã nguồn qua các task `LSB-0` .. `LSB-6`, merge/deploy UAT (`LSB-8`) và xử lý xong các điểm chuẩn hoá từ QA Audit ngày 2026-11-09 (`HOURLY-1H`, `STACKING-CAP`, `PHONE-FIRST-HOLD`). Các hạng mục còn mở thuộc nhóm cấu hình vận hành / quyết định của Owner trước hoặc sau Go-Live Production.
 
-| Phase | Status | Where |
-|---|---|---|
-| 1 Setup & contracts | done | contracts synced (booking-core, agent-landing); shared booking-kit |
-| 2 Core extensions | done | booking-core 0010 / 0011, cdp-core 0004, agent-core 0021 |
-| 3–6 US1–US5 (search, hold, VietQR + Telegram, /checkin) | done | landing `1a4ed5c`; agent-core `3c74659` |
-| 7 US6 OTA calendar | done | booking-core `e171488`, admin `21fb26e` |
-| 8 Polish & E2E | partly | probe fixes at 375 / 430 px done; UAT E2E after push to `dev` (LSB-8); check-in media = LSB-7 (owner) |
-
-Bugs / notes found while building:
-- Busy-card contrast, tab contrast, "Áp dụng" wrapping, placeholder contrast, summary order on mobile, guide text overflow — fixed (probe).
-- Pre-existing, out of scope: header Instagram gold link contrast and small footer tap targets on the landing.
-- Pre-existing time-of-day agent-core tests (brain-flow OD-5(a), BUG-27) fail at some hours on `dev` too.
-
-## Phase 1: Setup & Cross-Service Contracts (Shared Infrastructure)
-
-**Purpose**: Cập nhật cấu hình Service Bindings, định danh Caller `landing-bff`, module Rate Limiter theo IP và đồng bộ kiểu dữ liệu giữa các repo.
-
-- [ ] **T001** Cập nhật `van hanh/booking-page/everyinn-platform-docs/CONVENTIONS.md` và `contracts/booking-core.d.ts` để bổ sung caller `'landing-bff'`, kiểu `OvernightAddonsDTO` (đơn giá `60.000đ/giờ`), DTOs ưu đãi Public/Private/CDP và contract tra cứu đơn cho khách (`guest-lookup`).
-- [ ] **T002** [P] Cập nhật module context caller trong `van hanh/booking-page/everyinn-booking-core/src/lib/context.ts` và `van hanh/booking-page/everyinn-cdp-core/src/lib/context.ts` để chấp nhận header `x-ei-caller: landing-bff`.
-- [ ] **T003** [P] Cấu hình Service Bindings (`BOOKING_CORE`, `CDP_CORE`, `AGENT_CORE`) và biến môi trường Telegram/VietQR trong `van hanh/booking-page/every-inn-booking/wrangler.jsonc` và `cloudflare-env.d.ts`.
-- [ ] **T004** Tạo bộ Client gọi Core chuẩn hóa (kèm `x-request-id` & `x-ei-caller: landing-bff`) tại `van hanh/booking-page/every-inn-booking/src/lib/server/coreClients.ts`.
-- [ ] **T005** [P] Xây dựng Edge Rate Limiter theo IP (`CF-Connecting-IP`) với sliding window in-memory (Search: 30/m, Create Hold: 5/10m, Notify Paid: 5/m, Checkin: 5/15m) tại `van hanh/booking-page/every-inn-booking/src/lib/server/rateLimit.ts`.
+| Task ID | Hạng mục | Trạng thái | Đường dẫn / Ghi chú kiểm chứng |
+|---|---|---|---|
+| `LSB-0` | Shared Kit, OpenAPI Contracts & Docs | **DONE** `[x]` | `everyinn-platform-docs/shared/booking-kit/*`, `CONVENTIONS.md`, bộ `specs/001-guest-self-booking/*` & `EI_LANDING_SELF_BOOKING_SPEC.md` (`v3.0.0`, 2026-11-10) |
+| `LSB-1` | `everyinn-booking-core` Extensions | **DONE** `[x]` | Migration `0010`, `LANDING_READ`, `storefront.ts`, `stayRules.ts`, `availability.ts`, `SESSION_MANAGED` |
+| `LSB-1b` | `everyinn-cdp-core` Voucher Wallet | **DONE** `[x]` | Migration `0004` (`customer_vouchers`), `handlers/vouchers.ts`, `accrual.ts`, `outcomes.ts` |
+| `LSB-2` | `everyinn-agent-core` Session Engine & DOs | **DONE** `[x]` | Migration `0021`, `src/sessions/*`, DO `BookingSessionLive` & `InventoryPulse`, `LandingApi`, `AdminApi`, `POST /webhooks/payments/:provider`, `SEED_VERSION = 11` |
+| `LSB-3` | `every-inn-booking` BFF (`/api/guest/*`) | **DONE** `[x]` | 9 route files (11 HTTP operations), `guard()` (flag + same-origin + Workers RL), `criteria.ts`, `storefront.ts` |
+| `LSB-4` | `every-inn-booking` UI & `/checkin` | **DONE** `[x]` | `/`, `/dat-phong`, `/dat-phong/[token]`, `/checkin`, `HomeBooking`, `SearchBar`, `SearchPage`, `RoomResultCard`, `PhoneHoldModal`, `CheckoutPage`, `CheckinPage` |
+| `LSB-5` | `everyinn-admin` Unified Session Wizard | **DONE** `[x]` | `BookingWizard`, `SessionPaymentPanel`, `HoldSessionDrawer`, `GanttHoldBar`, `/api/sessions/*` |
+| `LSB-6` | OTA Calendar Extranet | **DONE** `[x]` | Migration `0011`, `calendar.ts`, `/calendar/matrix`, `/rate-overrides`, `/room-blocks/bulk`, `admin/src/app/calendar/page.tsx` |
+| `LSB-8` | UAT Release (`dev` & migrations) | **UAT DONE** `[x]` | Dev migrations `0004`, `0010`, `0011`, `0021` + `uat-lsb-smoke.mjs` (16/16). **Prod rollout xem mục Còn mở** |
+| `LSB-7` | Media Check-in thật trong `checkin_guide` | **BLOCKED (Owner)** `[ ]` | Cần URL ảnh check-in/out & video đầu hẻm `71/31` điền vào `checkin_guide` |
+| `LSB-10` | Chuyển kênh Chat AI sang Session Engine | **DEFERRED** `[ ]` | Ngoài phạm vi MVP Landing |
 
 ---
 
-## Phase 2: Foundational Core Extensions (Blocking Prerequisites)
+## Phase 1: Setup & Cross-Service Infrastructure (`LSB-0`, `LSB-1`)
 
-**Purpose**: Mở rộng `everyinn-booking-core` và `everyinn-agent-core` để phục vụ 4 ca qua đêm (kèm nút thêm giờ `60.000đ/giờ`), thông báo Telegram mọi trạng thái, chuẩn bị mã phòng trước và tra cứu đa khóa.
-
-- [ ] **T006** [US1] Xây dựng module tính toán các nút mua thêm giờ qua đêm (`computeOvernightAddons`) tuân thủ ma trận 4 ca (`21h-9h`, `22h-10h`, `23h-11h`, `24h-12h`), đơn giá cố định `60.000đ/giờ` và kiểm tra tính liên tục của slot + 60p dọn phòng tại `van hanh/booking-page/everyinn-booking-core/src/domain/overnightAddons.ts`.
-- [ ] **T007** [US1] Mở rộng handler `POST /internal/v1/availability/search` trong `van hanh/booking-page/everyinn-booking-core/src/handlers/availability.ts` để truy vấn cửa sổ mở rộng `[20:00, 13:00 hôm sau]` trong 1 lần đọc D1 và đính kèm `overnightAddons` vào từng phòng trả về.
-- [ ] **T008** [P] [US2] Mở rộng handler tính toán và kiểm tra khuyến mãi `POST /internal/v1/promotions/validate` tại `van hanh/booking-page/everyinn-booking-core/src/handlers/availability.ts` hỗ trợ áp dụng cả Public promotions (`is_public = 1`), Private promo codes (`is_public = 0`) và voucher thưởng tích tem CDP.
-- [ ] **T009** [P] [US4] Tạo endpoint nội bộ xác thực tra cứu đơn đa khóa `POST /internal/v1/bookings/guest-lookup` (so khớp SĐT + Mã đơn/Mã EIPAY/MXH/Ngày nhận phòng) tại `van hanh/booking-page/everyinn-booking-core/src/handlers/guestBookingLookup.ts`.
-- [ ] **T010** [US3] [US5] Tạo migration D1 `van hanh/booking-page/everyinn-agent-core/migrations/0002_landing_self_booking.sql` bổ sung bảng `landing_payment_verifications`.
-- [ ] **T011** [US3] [US5] Xây dựng handler thông báo Telegram mọi trạng thái đơn & chuẩn bị mã cổng/hộp khóa (`<pass_cổng>#`, `<pass lock box>`) kèm lời nhắc Quản lý (Human Manager) cài pass tại `van hanh/booking-page/everyinn-agent-core/src/handlers/landingNotifications.ts` và `guestCheckinAccess.ts`.
-- [ ] **T012** [US3] Mở rộng bộ xử lý Telegram Callback trong `van hanh/booking-page/everyinn-agent-core/src/flows/confirm.ts` để khi Quản lý bấm `[✅ Đã nhận đủ]` (`lpcf:<holdId>`), hệ thống tự động gọi `BOOKING_CORE` chốt đơn, gán mã phòng và gửi tin nhắn nhắc cài pass.
-- [ ] **T013** [US1] [US4] Viết bộ Unit Test kiểm thử toàn diện quy tắc 4 ca qua đêm (đơn giá `60.000đ/giờ`), công thức Core Pricing v2.0 (giảm giá chỉ tính trên `basePrice`) và tra cứu đa khóa tại `van hanh/booking-page/everyinn-booking-core/test/overnightAddons.test.ts`.
+- [x] **T001** Khởi tạo và đồng bộ `shared/booking-kit/{format,live,stay,types}.ts` sang `every-inn-booking/src/shared/booking-kit/` và `everyinn-admin/src/shared/booking-kit/` bằng `everyinn-platform-docs/scripts/sync-booking-kit.mjs`.
+- [x] **T002** Cập nhật `everyinn-booking-core/src/lib/context.ts` và `everyinn-cdp-core/src/lib/context.ts` hỗ trợ caller `landing-bff`; khóa quyền `LANDING_READ` trong `everyinn-booking-core/src/routes.ts` chỉ cho phép đọc.
+- [x] **T003** Cấu hình `every-inn-booking/wrangler.jsonc` & `env.d.ts`: Service Bindings (`CDP_CORE`, `BOOKING_CORE`, `AGENT_CORE` với entrypoint `LandingApi`), 4 Workers Rate Limiting bindings (`SEARCH_RL` 30/60s, `HOLD_RL` 3/60s, `PAID_RL` 5/60s, `LOOKUP_RL` 5/60s), và biến `WEB_BOOKING_ENABLED` (`"false"` ở Prod, `"true"` ở Dev).
+- [x] **T004** Xây dựng lớp BFF plumbing (`guard()`, `bookingCore`, `agent()`, envelope `{ ok, data | error, requestId }`, `Cache-Control: private, no-store`) tại `every-inn-booking/src/lib/server/bff.ts` và cached storefront reader tại `every-inn-booking/src/lib/server/storefront.ts`.
 
 ---
 
-## Phase 3: User Story 1 — Tìm phòng Agoda/Airbnb & Chọn nút Thêm giờ trên Thẻ phòng (Priority: P1) 🎯 MVP
+## Phase 2: Foundational Core & Session Engine (`LSB-1`, `LSB-1b`, `LSB-2`)
 
-**Goal**: Khách tìm phòng trên Landing Page với 3 chế độ (Giờ `08:00 - 21:00` / Qua đêm 4 ca / Theo ngày 15h-12h) và bấm chọn trực tiếp các nút `+1h/+2h/+3h checkin sớm` hoặc `checkout muộn` hợp lệ ngay trên từng thẻ phòng với đơn giá `+60.000đ/giờ`.
-
-**Independent Test**: Mở trang chủ `/`, chuyển đổi giữa 3 tab, kiểm tra kết quả 6 phòng trả về và bấm chọn các chip thêm giờ trên thẻ phòng (giá cộng đúng 60k/h).
-
-- [ ] **T014** [P] [US1] Xây dựng helper cấu hình 4 ca qua đêm, đơn giá thêm giờ `60.000đ/giờ`, quy tắc ngày in/out 15h–12h và tính giá tạm tính trên client tại `van hanh/booking-page/every-inn-booking/src/lib/booking/overnightRules.ts`.
-- [ ] **T015** [US1] Tạo BFF route `POST /api/guest/availability/search` (tích hợp `rateLimit.ts` 30 req/phút/IP) tại `van hanh/booking-page/every-inn-booking/src/app/api/guest/availability/search/route.ts`.
-- [ ] **T016** [US1] Thiết kế component `AgodaSearchBar.tsx` (Mobile-First, 3 tab: Theo giờ 8h-21h / Qua đêm 4 ca pill selector / Theo ngày chỉ chọn ngày in-out kèm thông báo 15h-12h) tại `van hanh/booking-page/every-inn-booking/src/components/booking/AgodaSearchBar.tsx`.
-- [ ] **T017** [US1] Thiết kế component `InteractiveRoomCard.tsx` (Carousel ảnh phòng, Badge hạng phòng & Khuyến mãi công khai Admin, khu vực nút bấm `+1h/2h/3h checkin sớm` và `+1h/2h/3h checkout muộn` với đơn giá `+60.000đ/giờ`) tại `van hanh/booking-page/every-inn-booking/src/components/booking/InteractiveRoomCard.tsx`.
-- [ ] **T018** [US1] Thiết kế `AvailableRoomGrid.tsx` và tích hợp thay thế khu vực đặt phòng tĩnh trên trang chủ `van hanh/booking-page/every-inn-booking/src/app/page.tsx`.
-
----
-
-## Phase 4: User Story 2 — Giữ phòng 10 phút, Điền thông tin, CDP & Khuyến mãi (Priority: P1)
-
-**Goal**: Khi khách bấm "Đặt phòng ngay", khóa lịch phòng trong đúng 10 phút (`ttlSeconds = 600`), thu thập thông tin khách, tự động nhận diện hạng thẻ CDP & quà tặng tem, áp dụng khuyến mãi tốt nhất theo Core Pricing v2.0.
-
-**Independent Test**: Bấm "Đặt phòng ngay" -> Chuyển sang `/book/[holdId]` -> Đồng hồ đếm ngược 10:00 chạy -> Nhập SĐT & Mã Promo -> Nhận mã VietQR.
-
-- [ ] **T019** [P] [US2] Tạo các BFF route quản lý Hold 10 phút:
-  - `POST /api/guest/holds` (tích hợp `rateLimit.ts` 5 holds/10m/IP) tại `van hanh/booking-page/every-inn-booking/src/app/api/guest/holds/route.ts`
-  - `GET / PATCH / DELETE /api/guest/holds/[id]` (hỗ trợ ETag `holdVersion`) tại `van hanh/booking-page/every-inn-booking/src/app/api/guest/holds/[id]/route.ts`
-  - `POST /api/guest/promotions/preview` tại `van hanh/booking-page/every-inn-booking/src/app/api/guest/promotions/preview/route.ts`
-- [ ] **T020** [P] [US2] Xây dựng `HoldCountdownBanner.tsx` (Thanh đếm ngược 10 phút dính trên đỉnh màn hình, tự động cảnh báo khi còn dưới 2 phút) tại `van hanh/booking-page/every-inn-booking/src/components/booking/HoldCountdownBanner.tsx`.
-- [ ] **T021** [US2] Xây dựng `GuestCheckoutForm.tsx` (Form SĐT tự động kiểm tra CDP hội viên & thưởng tem, Họ tên, Zalo/Instagram/Facebook, Số khách, Ô mã giảm giá Private/Public, Ghi chú) tại `van hanh/booking-page/every-inn-booking/src/components/booking/GuestCheckoutForm.tsx`.
+- [x] **T005** Tạo migration D1 `everyinn-booking-core/migrations/0010_booking_sessions_channel.sql` bổ sung `channel`, `session_id` trên `room_holds` & `bookings`; `voucher_code`, `voucher_value` trên `bookings`; `caller` trên `booking_audit_events`; `external_ref` trên `manual_financial_entries`; row cấu hình `overnight_shifts`.
+- [x] **T006** Xây dựng stay rules, 4 ca qua đêm, `computeOvernightAddons` (`60.000đ/giờ`, 2 làn `occupancy`/`turnover`), kiểm tra cửa sổ đặt trước ngày dương lịch `maxAdvanceDate` (`422 ADVANCE_BOOKING_EXCEEDED` cho web, `warnings[]` cho admin) và bước giờ `:00` (`422 HOURLY_CHECKIN_STEP_INVALID`) tại `everyinn-booking-core/src/domain/stayRules.ts` & `src/handlers/availability.ts`.
+- [x] **T007** Xây dựng read models `GET /internal/v1/storefront`, `GET /internal/v1/inventory/version` và xác thực đa khóa `POST /internal/v1/bookings/guest-lookup` (hỗ trợ mọi đơn mọi kênh) tại `everyinn-booking-core/src/handlers/storefront.ts`.
+- [x] **T008** Tạo migration D1 `everyinn-cdp-core/migrations/0004_customer_vouchers.sql` và handlers ví voucher (`reserve`, `release`, đổi thưởng milestone sang voucher ví, hoàn khi `cancelled`, giữ `redeemed` khi `no_show`) tại `everyinn-cdp-core/src/handlers/vouchers.ts`, `accrual.ts`, `outcomes.ts`.
+- [x] **T009** Tạo migration D1 `everyinn-agent-core/migrations/0021_booking_sessions.sql` (`booking_sessions`, `session_events`, `session_payments`, `payment_intents`, `payment_webhook_inbox`, `rate_counters`).
+- [x] **T010** Triển khai Session Engine & Durable Objects tại `everyinn-agent-core/src/sessions/`:
+  - State machine 10 trạng thái (`machine.ts`) & Command orchestrator (`service.ts`).
+  - Durable Objects `BookingSessionLive` (long-poll 25s + alarm hết hạn) & `InventoryPulse` (`live.ts`).
+  - HTTP entrypoints `LandingApi` (`/internal/v1/web/*`) & `AdminApi` (`/internal/v1/sessions*`) (`http.ts`, `index.ts`).
+  - Thẻ Telegram cập nhật tại chỗ `ss:<sid>:*` và `sm:<inbox>:<sid>`, không in plaintext mã cửa (`notify.ts`, `telegram.ts`).
+  - Payment adapter port `POST /webhooks/payments/:provider` (`sepay` | `casso` | `payos`) (`payments.ts`).
+  - Cron reconciler mỗi phút (`reconcile.ts`) & Master Data `SEED_VERSION = 11` (`booking_channels`, `checkin_guide`, `payment_policy`) (`defaults.ts`, `policy.ts`).
 
 ---
 
-## Phase 5: User Story 3 — Thanh toán VietQR, Xác nhận qua Telegram & Near-Realtime Polling (Priority: P1)
+## Phase 3–6: Guest BFF, UI Đặt phòng & `/checkin` (`LSB-3`, `LSB-4`)
 
-**Goal**: Hiển thị mã VietQR MB Bank chính xác theo đơn, gửi thông báo Telegram có nút bấm xác nhận cho Quản lý khi khách báo đã chuyển khoản, áp dụng Near-Realtime Adaptive Short Polling 3-4s tự động chuyển trang khi Quản lý duyệt.
-
-**Independent Test**: Bấm "Tôi đã chuyển khoản" -> Quản lý bấm `[✅ Đã nhận đủ]` trên Telegram -> Web khách tự động chuyển sang màn hình Thành công trong vòng < 4 giây.
-
-- [ ] **T022** [P] [US3] Tạo BFF route `POST /api/guest/holds/[id]/notify-paid` (rate-limit 5 req/phút/hold) tại `van hanh/booking-page/every-inn-booking/src/app/api/guest/holds/[id]/notify-paid/route.ts`.
-- [ ] **T023** [P] [US3] Tạo BFF route `POST /api/webhooks/banking` (hỗ trợ SePay/Casso/PayOS webhook đối soát tự động mã `EIPAY...`) tại `van hanh/booking-page/every-inn-booking/src/app/api/webhooks/banking/route.ts`.
-- [ ] **T024** [US3] Xây dựng `VietQRPaymentPanel.tsx` (Hiển thị QR MB Bank `0906314109999`, nút tải QR, copy STK/Nội dung, nút "Tôi đã chuyển khoản" và cơ chế Near-Realtime Adaptive Short Polling 3-4s với ETag) tại `van hanh/booking-page/every-inn-booking/src/components/booking/VietQRPaymentPanel.tsx`.
-- [ ] **T025** [US2] [US3] Hoàn thiện trang Checkout tổng hợp `/book/[holdId]` tại `van hanh/booking-page/every-inn-booking/src/app/book/[holdId]/page.tsx`.
-
----
-
-## Phase 6: User Story 4 & 5 — Tra cứu Đa Khóa & Trang Landing Page Hướng dẫn Check-in (`/checkin`) (Priority: P1)
-
-**Goal**: Khách nhập ít nhất 2 khóa xác thực để mở trang Hướng dẫn Check-in cá nhân hóa với 4 khối nội dung theo đúng thứ tự yêu cầu (Text đã thay biến `<pass_cổng>#`, `<số phòng>`, `<pass lock box>` -> 2 Ảnh -> Text Taxi 71/31 -> Video hướng dẫn).
-
-**Independent Test**: Mở `/checkin`, nhập SĐT + Mã `EIPAY...` -> Kiểm tra 4 khối nội dung hiển thị đúng thứ tự và đúng mã khóa của phòng.
-
-- [ ] **T026** [P] [US4] Chuẩn bị và tối ưu hóa bộ media hướng dẫn Check-in/Check-out (2 hình ảnh hướng dẫn và video hướng dẫn đi ô tô vào đầu hẻm 71/31) đặt tại `van hanh/booking-page/every-inn-booking/public/checkin-guide/`.
-- [ ] **T027** [P] [US4] Xây dựng module template văn bản Check-in 4 bước và hàm thay thế biến an toàn (`renderCheckinGuideContent`) tại `van hanh/booking-page/every-inn-booking/src/lib/booking/checkinTemplate.ts`.
-- [ ] **T028** [US4] Tạo BFF route `POST /api/guest/checkin/lookup` (kiểm tra rate-limit 5 lần/15 phút/IP, xác thực >= 2 keys, lấy mã giải mã từ `AGENT_CORE`, trả về header `Cache-Control: private, no-store`) tại `van hanh/booking-page/every-inn-booking/src/app/api/guest/checkin/lookup/route.ts`.
-- [ ] **T029** [US4] Xây dựng `CheckinLookupForm.tsx` (Giao diện nhập SĐT + chọn khóa xác thực thứ 2 trực quan trên di động) tại `van hanh/booking-page/every-inn-booking/src/components/checkin/CheckinLookupForm.tsx`.
-- [ ] **T030** [US4] Xây dựng `CheckinGuideView.tsx` (Hiển thị Thẻ Copy Nhanh Mã Cổng/Phòng/Hộp khóa + 4 Khối Nội Dung đúng thứ tự: Text chuẩn -> 2 Hình ảnh có Lightbox -> Text Taxi 71/31 -> Video Player) tại `van hanh/booking-page/every-inn-booking/src/components/checkin/CheckinGuideView.tsx`.
-- [ ] **T031** [US4] Tạo trang `/checkin` tại `van hanh/booking-page/every-inn-booking/src/app/checkin/page.tsx` và gắn nút dẫn `"🔑 Tra cứu Mã phòng & Hướng dẫn Check-in"` lên Header/Footer của Landing Page.
+- [x] **T011** Xây dựng 9 BFF routes (11 HTTP operations) dưới `/api/guest/*` tại `every-inn-booking/src/app/api/guest/`:
+  - `storefront/route.ts` (`GET`, ETag `304`)
+  - `availability/route.ts` (`POST`, server re-derivation qua `criteria.ts`)
+  - `pulse/route.ts` (`GET`, long-poll 25s qua `InventoryPulse`)
+  - `sessions/route.ts` (`POST`, Phone-First Hold, hỗ trợ `forceSwitch`, `clientNonce`)
+  - `sessions/[token]/route.ts` (`GET` ETag / `PATCH` / `DELETE`)
+  - `sessions/[token]/live/route.ts` (`GET`, long-poll 25s qua `BookingSessionLive`)
+  - `sessions/[token]/preview/route.ts` (`POST`, tính giá + CDP tier + voucher ví)
+  - `sessions/[token]/paid/route.ts` (`POST`, báo đã CK + gia hạn `+30p`)
+  - `checkin/lookup/route.ts` (`POST`, đa khóa + 2 lớp rate limit + `no-store`)
+- [x] **T012** Xây dựng UI Landing & Search Widget tại `every-inn-booking/src/components/booking/`:
+  - `HomeBooking.tsx` nhúng trên `/` (`src/app/page.tsx`)
+  - `SearchBar.tsx` (3 tab Theo giờ `:00` / Qua đêm 4 ca có `shiftSummary` / Theo ngày `15:00 -> 12:00`, chặn ngày vượt `bookingWindow.maxDate`)
+  - `RoomResultCard.tsx` (chip `+1h/+2h/+3h nhận sớm` & `trả muộn` `+60k/h`, badge KM công khai, phòng bận mờ `"Vừa được đặt"`)
+  - `SearchPage.tsx` trên `/dat-phong` (`src/app/dat-phong/page.tsx`, long-poll `useLongPoll`, bar dính dưới màn hình)
+  - `Disabled.tsx` hiển thị khi `WEB_BOOKING_ENABLED = "false"`.
+- [x] **T013** Xây dựng luồng Phone-First Hold & Checkout trên `/dat-phong/[token]` (`src/app/dat-phong/[token]/page.tsx`):
+  - `PhoneHoldModal.tsx` (nhập SĐT trước khi tạo hold, cảnh báo `409 ANOTHER_SESSION_LIVE` + 1-click `"Đổi sang phòng ..."`)
+  - `CheckoutPage.tsx` (3 bước, đồng hồ đếm ngược đồng bộ `serverNow`, form thông tin + CDP tier + chọn voucher ví + mã KM, VietQR động từ `properties.bank_*`, popup giữ lại khi bấm Huỷ/Back, màn hình Chờ / Thành công / Thiếu tiền / Hết hạn).
+- [x] **T014** Xây dựng trang `/checkin` (`src/app/checkin/page.tsx`, `src/components/checkin/CheckinPage.tsx`) xác thực >= 2 khóa, 4 khối nội dung đúng thứ tự, copy 1 chạm, lightbox phóng ảnh, và ẩn mã (`••••` + `pendingNote`) ngoài cửa sổ `[checkinAt - codesVisibleHoursBefore, checkoutAt + 2h]`.
 
 ---
 
-## Phase 7: User Story 6 — Quản Trị Lịch Phòng Kiểu OTA, Stop-Sell, Dynamic Rate Overrides & Rolling Advance Window (Priority: P2 / Admin)
+## Phase 7: Unified Admin Session Wizard & OTA Calendar Extranet (`LSB-5`, `LSB-6`)
 
-**Goal**: Cung cấp giao diện ma trận Calendar kiểu OTA cho Admin chủ động Đóng/Mở bán (Stop-Sell), Điều chỉnh giá trực tiếp theo ngày/ca (`calendar_rate_overrides`), và Cửa sổ nhận đặt trước luân phiên (`max_advance_days`: 2 tháng, 3 tháng, 6 tháng, 1 năm) tự động dời mỗi ngày.
-
-**Independent Test**: Vào màn hình Admin `/calendar` -> Bấm Đóng bán phòng 202 ngày 20/11 -> Khách lên Landing Page tìm phòng ngày 20/11 thấy phòng 202 bị ẩn hoặc báo hết -> Admin đổi giá ngày 21/11 thành 580.000đ -> Khách tìm thấy giá 580.000đ và khuyến mãi áp dụng trên 580.000đ -> Thử đặt ngày quá 90 ngày tới bị chặn cả trên Web DatePicker lẫn Core API.
-
-- [ ] **T032** [US6] Tạo migration D1 `van hanh/booking-page/everyinn-booking-core/migrations/0005_calendar_rate_overrides.sql` tạo bảng `calendar_rate_overrides`, bổ sung cột `max_advance_days` vào `booking_configs` và các index phục vụ truy vấn tối ưu.
-- [ ] **T033** [P] [US6] Mở rộng domain pricing trong `van hanh/booking-page/everyinn-booking-core/src/domain/pricing.ts` để tra cứu và thay thế $P_{\text{base}}$ bằng `custom_base_price` từ `calendar_rate_overrides` trước khi áp dụng chiết khấu promo/CDP.
-- [ ] **T034** [P] [US6] Xây dựng module kiểm tra ngày đặt trước luân phiên `bookingRules.ts` trong `van hanh/booking-page/everyinn-booking-core/src/domain/bookingRules.ts` xác thực $D_{\text{checkin}} \le D_{\text{today}} + \text{max\_advance\_days}$, trả về `422 ADVANCE_BOOKING_EXCEEDED` nếu vi phạm.
-- [ ] **T035** [US6] Xây dựng các handler API nội bộ trong `van hanh/booking-page/everyinn-booking-core/`:
-  - `src/handlers/calendar.ts`: `GET /internal/v1/calendar/matrix` (tổng hợp trạng thái phòng, giá bán, override, stop-sell trong khoảng ngày)
-  - `src/handlers/rateOverrides.ts`: `POST /internal/v1/calendar/rate-overrides` và `DELETE /internal/v1/calendar/rate-overrides/:id`
-  - `src/handlers/roomBlocks.ts`: `POST /internal/v1/room-blocks/stop-sell` và `DELETE /internal/v1/room-blocks/:id`
-  - `src/handlers/bookingConfigs.ts`: `GET /internal/v1/booking-configs` và `PATCH /internal/v1/booking-configs`
-- [ ] **T036** [US6] Cập nhật component `AgodaSearchBar.tsx` trên `van hanh/booking-page/every-inn-booking` để vô hiệu hóa (disabled) các ngày vượt quá `max_advance_days` trên DatePicker.
-- [ ] **T037** [P] [US6] Xây dựng trang Ma Trận Lịch Phòng Kiểu OTA tại `van hanh/booking-page/everyinn-admin/src/app/calendar/page.tsx` và component `CalendarMatrixView.tsx` hiển thị lưới phòng x ngày, màu trạng thái, giá bán hiện tại và badge override.
-- [ ] **T038** [US6] Xây dựng các component tương tác Admin tại `van hanh/booking-page/everyinn-admin/src/components/calendar/`:
-  - `StopSellActionModal.tsx`: Đóng/Mở phòng nhanh cho 1 ngày hoặc dải ngày
-  - `DynamicRateOverrideDrawer.tsx`: Chỉnh sửa giá bán trực tiếp theo ngày và ca
-  - `RollingAdvanceWindowConfig.tsx`: Cấu hình số tháng/ngày nhận trước (2 tháng, 3 tháng, 6 tháng, 1 năm)
-- [ ] **T039** [US6] Viết Unit Test kiểm thử bảng ghi đè giá (`calendar_rate_overrides`), kiểm thử tích hợp giá Core v2.0 khi có override, và kiểm thử logic dời ngày tự động `max_advance_days` tại `van hanh/booking-page/everyinn-booking-core/test/calendarRateOverrides.test.ts`.
+- [x] **T015** Nâng cấp `everyinn-admin` dùng chung Session Engine (`LSB-5`):
+  - Routes `/api/sessions/*` gọi `AGENT_CORE` `AdminApi`, `BookingWizard.tsx` + `SessionPaymentPanel.tsx` (VietQR, link `/dat-phong/<token>`, nhận tiền mặt/thẻ/CK, cọc/thiếu/bù, timeline audit), `GanttHoldBar.tsx` + `HoldSessionDrawer.tsx`, Booking Core trả `409 SESSION_MANAGED` cho hold do session quản lý.
+- [x] **T016** Xây dựng OTA Calendar Extranet (`LSB-6`):
+  - Migration `everyinn-booking-core/migrations/0011_calendar_rates.sql` (`rate_overrides`, `room_blocks.block_type`).
+  - Hooks ghi đè giá trong `pricing.ts` (`rate_overrides` phòng → hạng → `rate_rules`) và handlers `calendar.ts` (`GET /calendar/matrix`, `GET|PUT /rate-overrides`, `POST /rate-overrides/clear`, `POST /room-blocks/bulk`).
+  - Giao diện Admin `/calendar` (`everyinn-admin/src/app/calendar/page.tsx`) với `RateOverrideDrawer.tsx`, `StopSellModal.tsx`, `BookingWindowCard.tsx` (`PUT /configs/booking_rules`).
 
 ---
 
-## Phase 8: Polish, Accessibility & End-to-End Verification
+## Phase 8: QA Audit Fixes, Spec Sync & Verification (2026-11-09 → 2026-11-10)
 
-- [ ] **T040** [P] Kiểm tra toàn bộ giao diện trên viewport di động (`375x812` iPhone SE/14, `430x932` Pro Max, Android Chrome): đảm bảo nút chạm `>= 44x44px`, font tiếng Việt có dấu hiển thị hoàn hảo, không bị tràn ngang (`overflow-x: hidden`).
-- [ ] **T041** [P] Kiểm tra tuân thủ Cloudflare Free Tier (`rules/cloudflare-free-tier.md`): xác nhận bundle size, CPU time `< 10ms`, tải toàn hệ thống ~2.000 req/ngày (< 3% quota 100k/ngày) và mọi câu lệnh D1 đều dùng index.
-- [ ] **T042** Chạy kiểm thử toàn trình (End-to-End Flow): Tìm phòng Qua đêm -> Chọn thêm giờ trên thẻ phòng (+60k/h) -> Giữ chỗ 10 phút -> Nhập SĐT nhận ưu đãi CDP/Promo -> Nhận VietQR -> Bấm đã chuyển khoản -> Near-realtime polling -> Bấm xác nhận trên Telegram -> Nhận tin nhắn nhắc cài pass -> Mở `/checkin` bằng 2 key và kiểm tra 4 phần nội dung hướng dẫn -> Kiểm tra Stop-Sell và Dynamic Rate Override trên Calendar Admin.
+- [x] **T017** **Fix `STACKING-CAP` (Q5)**: Sửa `loyaltyCap` trong `everyinn-booking-core/src/domain/pricing.ts` (`min(remainingBase, priceBeforeLoyalty)`) để promotion + voucher không trừ lấn vào phụ thu; thêm regression test trong `test/domain.spec.ts`.
+- [x] **T018** **Fix `HOURLY-1H` (Q1)**: Chốt bước giờ nhận phòng theo giờ = **1 giờ chẵn (`:00`)** ở `shared/booking-kit/stay.ts` (`hourlyStarts`), `every-inn-booking/src/lib/server/criteria.ts`, `everyinn-booking-core/src/domain/stayRules.ts` (`HOURLY_CHECKIN_STEP_INVALID`) và đồng bộ `booking-kit`.
+- [x] **T019** **Fix `PHONE-FIRST-HOLD` (Q4)**: Triển khai `PhoneHoldModal.tsx`, kiểm tra `phone_hash` tối đa 1 phiên sống/SĐT, `409 ANOTHER_SESSION_LIVE` + `forceSwitch: true` tại `everyinn-agent-core` và BFF, kèm unit tests (`guestBooking.test.mjs`, `perfectCases.test.mjs`, `sessions.spec.ts`).
+- [x] **T020** **Làm rõ `addBusinessDays` (Q2)**: Bổ sung docstring xác nhận hàm tính **ngày dương lịch VN (`Asia/Ho_Chi_Minh`)** tại `everyinn-booking-core/src/domain/time.ts`.
+- [x] **T021** **Kiểm thử tự động trên toàn hệ thống**:
+  - `every-inn-booking`: `test/guestBooking.test.mjs`, `test/perfectCases.test.mjs`, `test/contract.test.mjs`.
+  - `everyinn-booking-core`: `test/lsb.spec.ts`, `test/calendar.spec.ts`, `test/domain.spec.ts`, `test/bookings.spec.ts`, `test/callers.spec.ts`.
+  - `everyinn-cdp-core`: `test/vouchers.spec.ts`.
+  - `everyinn-agent-core`: `test/sessions.spec.ts`, `test/contract.spec.ts`, `test/masterdata.spec.ts`.
+  - `everyinn-admin`: `test/calendar.test.mjs`, `test/sessions.test.mjs`, `test/contract.test.mjs`.
+  - E2E UAT live: `everyinn-platform-docs/scripts/uat-lsb-smoke.mjs` (16/16 bước xanh trên dev).
+- [x] **T022** **Chuẩn hóa Spec Suite & Source of Truth (2026-11-10)**: Cập nhật đồng bộ 100% `source-of-truth.md`, `spec.md`, `contracts/guest-booking-api.md`, `data-model.md`, `plan.md`, `tasks.md`, `everyinn-platform-docs/EI_LANDING_SELF_BOOKING_SPEC.md` và `CONVENTIONS.md`.
+
+---
+
+## Hạng mục Còn mở (Chờ Owner quyết định / Cấu hình Go-Live Production)
+
+- [ ] **T023** **[`LSB-7` — Owner Media Check-in]**: Owner cung cấp URL thật cho ảnh Check-in, ảnh Check-out (`checkinImageUrl`, `checkoutImageUrl`) và video đường đi đầu hẻm `71/31` (`videoUrl`, `posterUrl`) để cập nhật vào master data `checkin_guide`.
+- [ ] **T024** **[Cửa sổ hiển thị mã phòng `codesVisibleHoursBefore`]**: Owner xác nhận giữ mức seed hiện tại **`6` tiếng** (`defaults.ts` / `policy.ts`) hay chỉnh xuống **`2` tiếng** trong master data `checkin_guide`.
+- [ ] **T025** **[Webhook Ngân hàng Tự động (`autoConfirmExactMatch`)]**: Chọn nhà cung cấp (`SePay` / `Casso` / `PayOS`), nạp secret (`SEPAY_WEBHOOK_KEY` / `CASSO_WEBHOOK_TOKEN` / `PAYOS_CHECKSUM_KEY`) lên `everyinn-agent-core`, chạy Shadow Mode trước khi bật `payment_policy.autoConfirmExactMatch = true`.
+- [ ] **T026** **[Loyalty Template Promotions (`D-02`)]**: Tạo 3 promotion mẫu (`50k`/`100k`/`150k`) trên Booking Core Prod gắn `voucherPromotionId` trong CDP rule set.
+- [ ] **T027** **[Go-Live Production (`LSB-9`)]**: Theo đúng thứ tự trong [EI_PROD_RELEASE_CHECKLIST.md](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/everyinn-platform-docs/EI_PROD_RELEASE_CHECKLIST.md) — tạo `agent-db-prod` & secrets, chạy migrations prod (`0004`, `0010`, `0011`, `0021`), deploy theo thứ tự `cdp-core` → `booking-core` → `agent-core` → `admin` → `every-inn-booking` (khi Owner duyệt mới bật `WEB_BOOKING_ENABLED = "true"`).
+- [ ] **T028** **[Chính sách Voucher & Cleanup Kỹ thuật — Optional]**: (a) Xác nhận quy tắc hoàn voucher khi khách `cancelled` và không hoàn khi `no_show`; (b) Quyết định có đổi tên `addBusinessDays` → `addCalendarDays` ở đợt dọn code sau; (c) **`LSB-10`**: Chuyển kênh Chat AI dùng Session Engine.

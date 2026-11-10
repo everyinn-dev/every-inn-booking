@@ -1,359 +1,546 @@
 # Data Model & State Machines: Guest Self-Booking, Payment & Check-in Guide
 
-- **Branch**: `001-guest-self-booking`
-- **Date**: 2026-04-20
-- **Version**: 2.0.0 (Updated to Core Pricing v2.0, Real-world Operational Metrics & Edge Security)
-- **Last Updated**: 2026-11-08
-- **Spec**: [spec.md](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/every-inn-booking/specs/001-guest-self-booking/spec.md)
+- **Branch**: `feat/landing-self-booking` (Spec-Kit `001-guest-self-booking`)
+- **Version**: 3.0.0 (Aligned 100% with [source-of-truth.md](./source-of-truth.md) and actual codebase)
+- **Last Updated**: 2026-11-10
+- **Spec**: [spec.md](./spec.md)
+- **Shared DTO Source**: [shared/booking-kit/types.ts](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/everyinn-platform-docs/shared/booking-kit/types.ts) · [stay.ts](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/everyinn-platform-docs/shared/booking-kit/stay.ts)
 
 ---
 
 ## 1. Cross-Database Ownership Matrix
 
-Tuân thủ nguyên tắc cô lập dữ liệu trong `everyinn-platform-docs/CONVENTIONS.md`, dữ liệu của tính năng tự đặt phòng được phân bổ rõ ràng trên 3 cơ sở dữ liệu D1:
+Tuân thủ nguyên tắc cô lập dữ liệu trong [CONVENTIONS.md](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/everyinn-platform-docs/CONVENTIONS.md), dữ liệu của Landing Self-Booking & Session Engine thống nhất (Web + Admin) phân bổ trên 3 cơ sở dữ liệu D1:
 
-| D1 Database | Owner Worker | Bảng liên quan | Vai trò trong luồng Khách tự đặt phòng |
+| D1 Database | Owner Worker | Bảng liên quan (mới / mở rộng) | Vai trò trong luồng Đặt phòng & Vận hành |
 | :--- | :--- | :--- | :--- |
-| **`BOOKING_DB`** | `everyinn-booking-core` | `rooms`, `inventory_slots`, `room_holds`, `bookings`, `promotions`, `promotion_redemptions`, `manual_financial_entries`, `cdp_sync_outbox`, `booking_audit_events`, `domain_versions`, `calendar_rate_overrides`, `booking_configs`, `room_blocks` | Kiểm tra lịch trống + tính toán `overnightAddons` (đơn giá 60k/h), giữ chỗ 10 phút (`ttl_seconds = 600`), tính giá Core v2.0 (Public & Private Promos, Calendar Overrides), quản lý Stop-Sell/Mở phòng, kiểm tra Rolling Advance Window, chốt đơn `confirmed`, ghi sổ tài chính và đẩy sự kiện sang CDP. |
-| **`CDP_DB`** | `everyinn-cdp-core` | `customers`, `customer_identifiers`, `loyalty_rule_sets`, `stamp_cycles`, `stamp_entries` | Tra cứu khách hàng theo `phone` (E.164 `+84...`) để lấy hạng thẻ (`not_member`, `bronze`, `silver`, `gold`), kiểm tra phần thưởng tích tem (`EVERYINN_STAMP_10_V1`), và tích lũy tem/đêm sau khi thanh toán. |
-| **`AGENT_DB`** | `everyinn-agent-core` | `gate_codes`, `room_lockbox_codes`, `booking_code_overrides`, `escalations`, `landing_payment_verifications` | Lưu trữ mã hóa AES-GCM cho `<pass_cổng>#` & `<pass lock box>`, chuẩn bị mã trước khi khách đến, gửi thông báo + xử lý nút bấm xác nhận trên Telegram cho Quản lý (Human Manager), và giải mã trả về khi khách tra cứu `/checkin`. |
+| **`BOOKING_DB`** | `everyinn-booking-core` | `properties`, `rooms`, `rate_rules`, `surcharge_rules`, `booking_configs` (`booking_rules`, `overnight_shifts`, `hourly_checkin_slots`), `inventory_slots` (2 lanes `occupancy` & `turnover`), `room_holds` (+`channel`, `session_id`), `bookings` (+`channel`, `session_id`, `voucher_code`, `voucher_value`), `promotions`, `promotion_redemptions`, `rate_overrides` (migration `0011`), `room_blocks` (+`block_type`), `manual_financial_entries` (+`external_ref`), `booking_audit_events` (+`caller`), `domain_versions`, `cdp_sync_outbox` | Cửa hàng công khai (`/storefront`), kiểm tra lịch trống + `overnightAddons` (`60.000đ/giờ`) trong 1 batch slot query, kiểm tra cửa sổ đặt trước (`booking_rules.max_advance_days`, ngày dương lịch VN), tính giá Core v2.0 + `rate_overrides` + `stackDiscounts`, giữ chỗ + chốt đơn `confirmed`, chặn `409 SESSION_MANAGED` nếu sửa hold thuộc session từ caller ngoài `agent-core`. |
+| **`CDP_DB`** | `everyinn-cdp-core` | `customers`, `customer_identifiers`, `loyalty_rule_sets`, `stamp_cycles`, `stamp_entries`, `customer_vouchers` (migration `0004`) | Tra cứu khách theo SĐT E.164 `+84...` (`loyalty-context`), trả hạng thẻ (`not_member`, `bronze`, `silver`, `gold`) và ví voucher; phát hành voucher thưởng tích tem (`TEM<step>-XXXX`), lease voucher theo hold (`reserve`/`release`), đánh dấu `redeemed` khi chốt đơn và hoàn `issued` khi đơn `cancelled` (giữ `redeemed` nếu `no_show`). |
+| **`AGENT_DB`** | `everyinn-agent-core` | `booking_sessions`, `session_events` (append-only), `session_payments` (append-only), `payment_intents`, `payment_webhook_inbox`, `rate_counters` (migration `0021`), `master_data` (`booking_channels`, `checkin_guide`, `payment_policy` SEED 11), `gate_codes`, `room_lockbox_codes`, `booking_code_overrides`, `escalations` | Động cơ **Booking Session Engine** cho cả `web` và `admin` (tuần tự qua Durable Object `BookingSessionLive`), điều phối `InventoryPulse`, lưu SHA-256 `token_hash` (không lưu raw token), đếm `phone_hash` / `ip_hash` / `rate_counters`, nhận webhook ngân hàng (`sepay`/`casso`/`payos`), xử lý thẻ Telegram `ss:`/`sm:`, lưu mã hoá AES-GCM mã cổng/hộp khoá và giải mã có điều kiện cửa sổ thời gian tại `/checkin`. |
 
 ---
 
-## 2. Core Data Transfer Objects (DTOs)
+## 2. Core Data Transfer Objects (`shared/booking-kit` & Session Engine)
 
-### 2.1. `OvernightAddonsDTO` (Mở rộng trong `AvailabilityRoomResult`)
-Khi `bookingType === 'overnight'`, mỗi phòng trong kết quả tìm kiếm trả về thêm trường `overnightAddons` với đơn giá **`60.000đ/giờ`**:
+### 2.1. `Storefront` & `OvernightAddons` (`shared/booking-kit/types.ts`, `stay.ts`)
 
 ```typescript
-export type OvernightShiftCode = '21-9' | '22-10' | '23-11' | '24-12';
+export type StayKind = "hourly" | "overnight" | "dayuse";
 
-export interface OvernightAddonOption {
-  hours: 1 | 2 | 3;
-  type: 'early_checkin' | 'late_checkout';
-  label: string;              // VD: "Thêm 1h checkin sớm (nhận 21:00)" | "Thêm 2h checkout muộn (trả 11:00)"
-  shortLabel: string;         // VD: "+1h checkin sớm" | "+2h checkout muộn"
-  effectiveTimeIso: string;   // Mốc checkinAt hoặc checkoutAt mới nếu chọn nút này
-  surchargeVnd: number;       // 60000 * hours
-  available: boolean;         // true nếu toàn bộ slot liên tiếp + 60p dọn phòng đều trống
-  unavailableReason?: 'SLOT_OCCUPIED' | 'TURNOVER_BUFFER_CONFLICT';
+export interface OvernightShift {
+  code: string;   // "21-9" | "22-10" | "23-11" | "24-12"
+  start: string;  // HH:MM ("00:00" = rạng sáng sau ngày đêm D)
+  end: string;    // HH:MM (sáng hôm sau D+1)
+  label: string;  // "21h – 9h" ...
 }
 
-export interface OvernightAddonsDTO {
-  shift: OvernightShiftCode;
-  baseCheckinAt: string;      // ISO +07:00 của ca cơ bản đã chọn
-  baseCheckoutAt: string;     // ISO +07:00 của ca cơ bản đã chọn
-  maxEarlyAllowedByRule: 0 | 1 | 2 | 3;
-  maxLateAllowedByRule: 0 | 1 | 2 | 3;
-  surchargePerHour: 60000;    // Cố định 60.000đ / giờ
-  earlyCheckinOptions: OvernightAddonOption[];  // Độ dài mảng = maxEarlyAllowedByRule (0..3)
-  lateCheckoutOptions: OvernightAddonOption[];  // Độ dài mảng = maxLateAllowedByRule (0..3)
+export interface Storefront {
+  catalogVersion: number;
+  bank: { bankId: string | null; account: string | null; holderName: string | null } | null;
+  rooms: {
+    id: string;        // "haven-101".."haven-301", "sig-102".."sig-302"
+    roomNumber: string;
+    name: string;
+    roomClass: "haven" | "signature";
+    floor: number;
+    areaSqm: number | null;
+    maxGuests: number;
+  }[];
+  rates: Record<
+    "haven" | "signature",
+    { combo3h: number | null; overnight: number | null; dayroom: number | null; extraHourFee: number }
+  >;
+  extraGuest: { standardGuests: number; feePerGuest: number; roomClasses: string[] };
+  hourly: { minHours: number; firstCheckin: string; lastCheckin: string; slots: number[] };
+  overnight: { window_start: string; window_end: string; max_addon_hours: number; shifts: OvernightShift[] };
+  dayuse: { checkin: string; checkout: string };
+  bookingWindow: { today: string; maxAdvanceDays: number; maxDate: string; minLeadMinutes: number };
+  publicPromotions: {
+    id: string;
+    name: string;
+    discountType: "percentage" | "fixed_amount";
+    discountValue: number;
+    description: string | null;
+  }[];
 }
 ```
 
-#### Quy tắc số lượng phần tử mảng theo từng ca:
-1. **Ca `21-9` (`21:00 -> 09:00`)**:
-   - `earlyCheckinOptions`: `[]` (0 nút, không nhận trước 21h)
-   - `lateCheckoutOptions`: Tối đa 3 nút (`+1h checkout muộn (10h)`, `+2h (11h)`, `+3h (12h)`)
-2. **Ca `22-10` (`22:00 -> 10:00`)**:
-   - `earlyCheckinOptions`: Tối đa 1 nút (`+1h checkin sớm (21h)`)
-   - `lateCheckoutOptions`: Tối đa 2 nút (`+1h checkout muộn (11h)`, `+2h (12h)`)
-3. **Ca `23-11` (`23:00 -> 11:00`)**:
-   - `earlyCheckinOptions`: Tối đa 2 nút (`+1h checkin sớm (22h)`, `+2h (21h)`)
-   - `lateCheckoutOptions`: Tối đa 1 nút (`+1h checkout muộn (12h)`)
-4. **Ca `24-12` (`00:00 -> 12:00`)**:
-   - `earlyCheckinOptions`: Tối đa 3 nút (`+1h checkin sớm (23h)`, `+2h (22h)`, `+3h (21h)`)
-   - `lateCheckoutOptions`: `[]` (0 nút, không trả sau 12h trưa)
-
----
-
-### 2.2. Promotion & Loyalty DTOs (Core v2.0 Stacking)
+> **Lưu ý dữ liệu phòng**: ID thật trong `BOOKING_DB.rooms` là `haven-101`, `haven-201`, `haven-301`, `sig-102`, `sig-202`, `sig-302`. Seed `BOOKING_DB` ghi `area_sqm` là `22` / `28` m², còn marketing copy trên Landing (`src/data/rooms.ts`) hiển thị `16` m² (Haven) / `24`–`30` m² (Signature); thẻ kết quả tìm kiếm ưu tiên `roomMedia(roomNumber).area` từ Landing và hiển thị tiêu đề `Phòng {roomNumber}`.
 
 ```typescript
-export type LoyaltyTier = 'not_member' | 'bronze' | 'silver' | 'gold';
-
-export interface PromotionSummaryDTO {
-  id: string;
-  code: string | null;        // null nếu là Public Promotion
-  name: string;
-  isPublic: boolean;          // true: ưu đãi công khai; false: mã riêng tư
-  discountType: 'percentage' | 'fixed_amount';
-  discountValue: number;
-  maxDiscountAmount: number | null;
-  discountApplied: number;    // VND giảm thực tế (chỉ tính trên Base Price)
-}
-
-export interface LoyaltyRewardSummaryDTO {
+export interface AddonOption {
+  hours: number;
+  type: "early_checkin" | "late_checkout";
+  shortLabel: string;        // "+1h nhận sớm" | "+2h trả muộn"
+  label: string;             // "Thêm 1h nhận phòng sớm (nhận 21:00)"
+  effectiveTimeIso: string;  // UTC ISO
+  surchargeVnd: number;      // 60000 * hours (extra_hour_fee)
   available: boolean;
-  tier: LoyaltyTier;
-  milestoneStep: number | null;
-  rewardValue: number;        // Ví dụ: 50.000, 100.000, 150.000đ từ tích tem
-  label: string | null;
-  rewardApplied: number;      // VND giảm thực tế (sau khi đã trừ promo, không âm)
+  unavailableReason?: "SLOT_OCCUPIED" | "TURNOVER_BUFFER_CONFLICT" | "IN_THE_PAST";
 }
 
-export interface PricingBreakdownDTO {
-  basePrice: number;          // P_base gốc theo bảng giá hạng phòng
-  promotionDiscount: number;  // D_promo
-  loyaltyDiscount: number;    // D_loyalty
-  holidaySurcharge: number;   // S_holiday
-  extraHourFee: number;       // S_extra_hours = extraHours * 60.000đ
-  extraGuestFee: number;      // S_extra_guests (nếu Signature >= 3 khách)
-  subtotal: number;           // basePrice + holiday + extraHours + extraGuests
-  totalPrice: number;         // max(0, basePrice - promo - loyalty) + surcharges
+export interface SearchRoom {
+  room: {
+    id: string;
+    roomNumber: string;
+    name: string;
+    roomClass: "haven" | "signature";
+    maxGuests: number;
+    areaSqm: number | null;
+    floor: number;
+  };
+  available: boolean;
+  reasons: { code: string; message: string }[]; // Public reason: "JUST_BOOKED" ("Vừa được đặt") hoặc "TOO_MANY_GUESTS"
+  price: {
+    basePrice: number;
+    subtotal: number;
+    extraGuestFee: number;
+    extraFee: number;
+    holidaySurcharge: number;
+    total?: number;
+    promotion?: { name: string; discount: number } | null;
+    lines: { code: string; label: string; amount: number }[];
+  } | null;
+  overnightAddons?: {
+    shift: string;
+    maxEarlyAllowedByRule: number;
+    maxLateAllowedByRule: number;
+    surchargePerHour: number; // 60000
+    earlyCheckinOptions: AddonOption[];
+    lateCheckoutOptions: AddonOption[];
+  } | null;
+}
+
+export interface SearchResult {
+  bookingsVersion: number;
+  checkinAt: string;
+  checkoutAt: string;
+  bookingWindow: { maxAdvanceDays: number; maxDate: string };
+  warnings?: { code: string; message: string }[];
+  shiftSummary?: {
+    code: string;
+    label: string;
+    checkinAt: string;
+    checkoutAt: string;
+    availableRooms: number;
+    past: boolean;
+  }[];
+  rooms: SearchRoom[];
 }
 ```
 
+#### Ma trận nút thêm giờ qua đêm (`booking_configs['overnight_shifts']`):
+Khung biên `[window_start, window_end]` mặc định `[21:00, 12:00]`, `max_addon_hours = 3`:
+
+| Ca cơ bản | `earlyCheckinOptions` tối đa | `lateCheckoutOptions` tối đa | Đơn giá |
+|---|---|---|---|
+| `21-9` (`21:00 → 09:00`) | `0` nút | `3` nút (`+1h` `10:00`, `+2h` `11:00`, `+3h` `12:00`) | `60.000đ/giờ` |
+| `22-10` (`22:00 → 10:00`) | `1` nút (`+1h nhận sớm` `21:00`) | `2` nút (`+1h` `11:00`, `+2h` `12:00`) | `60.000đ/giờ` |
+| `23-11` (`23:00 → 11:00`) | `2` nút (`+1h` `22:00`, `+2h` `21:00`) | `1` nút (`+1h trả muộn` `12:00`) | `60.000đ/giờ` |
+| `24-12` (`00:00 → 12:00`) | `3` nút (`+1h` `23:00`, `+2h` `22:00`, `+3h` `21:00`) | `0` nút | `60.000đ/giờ` |
+
+*(Thuật toán liên tiếp: nếu bậc $k$ bị vướng `IN_THE_PAST`, `SLOT_OCCUPIED` hoặc `TURNOVER_BUFFER_CONFLICT`, mọi bậc $> k$ tự động `available: false`)*
+
 ---
 
-### 2.3. `Holds` & `Bookings` State Machine (10-Minute TTL + Near-Realtime Polling)
+### 2.2. Booking Session DTO (`SessionView`), `Preview` & Voucher Wallet
+
+```typescript
+export type SessionStatus =
+  | "holding"
+  | "awaiting_payment"
+  | "payment_claimed"
+  | "underpaid"
+  | "confirming"
+  | "confirmed"
+  | "expired"
+  | "cancelled"
+  | "late_payment"
+  | "conflict";
+
+export const LIVE_STATUSES: SessionStatus[] = [
+  "holding",
+  "awaiting_payment",
+  "payment_claimed",
+  "underpaid",
+];
+
+export interface SessionView {
+  ref: string;                        // Mask id hoặc public ref (không lộ raw secret token)
+  channel: "web" | "admin" | "chat";
+  status: SessionStatus;
+  statusLabel: string;                // Khớp STATUS_LABEL trong machine.ts
+  room: { id: string; label: string };
+  bookingType: string;
+  shift: string | null;
+  checkinAt: string;                  // UTC ISO
+  checkoutAt: string;                 // UTC ISO
+  earlyHours: number;
+  lateHours: number;
+  numGuests: number;
+  expiresAt: string;                  // UTC ISO
+  serverNow: string;                  // UTC ISO để client tính đồng hồ lệch chuẩn
+  remainingSeconds: number;
+  amountDue: number;
+  paidAmount: number;
+  remaining: number;
+  pricing: {
+    basePrice: number | null;
+    subtotal: number;
+    promotion: { name: string; discount: number } | null;
+    voucher: { codeMasked: string; label: string; discount: number } | null;
+    total: number;
+    payable: number;
+    isDeposit: boolean;
+  } | null;
+  guest: {
+    name: string | null;
+    phoneMasked: string | null;
+    phone?: string | null;            // Chỉ trả đầy đủ cho AdminApi; web nhận phoneMasked
+    zalo?: string | null;
+    instagram: string | null;
+    facebook: string | null;
+    note: string | null;
+  } | null;
+  payment: {
+    bankId: string | null;            // Đọc động từ BOOKING_DB.properties
+    account: string | null;
+    holderName: string | null;
+    amount: number;
+    reference: string;                // "EIPAY<YYMMDD><4CHAR>"
+    qrUrl: string | null;
+  } | null;
+  bookingId: string | null;
+  can: { editGuest: boolean; claimPaid: boolean; cancel: boolean };
+  timeline: { event: string; label: string; at: string }[]; // Chỉ gồm session_events.public = 1
+  version: number;                    // Optimistic version cho long-poll ?v= và ETag
+}
+
+export interface Preview {
+  pricing: {
+    basePrice: number;
+    surcharges: number;
+    lines: { code: string; label: string; amount: number }[];
+    subtotal: number;
+    promotion: { name: string | null; eligible: boolean; reason: string | null; discount: number } | null;
+    voucher: { id: string; codeMasked: string; label: string; discount: number } | null;
+    total: number;
+  };
+  member: { tier: string | null; found: boolean | null } | null;
+  vouchers: {
+    id: string;
+    codeMasked: string;
+    value: number;
+    label: string;
+    expiresAt: string;
+    code?: string | null;             // Bị ẩn trên web (mask = true)
+  }[];
+}
+```
+
+#### Công thức Stacking (`stackDiscounts`, `everyinn-booking-core/src/domain/pricing.ts`):
+```text
+capBase       = min(basePrice, subtotal)
+promo         = min(max(0, promoDiscount), capBase)
+remainingBase = max(0, capBase - promo)
+loyalty       = min(max(0, voucher), min(remainingBase, max(0, subtotal - promo)))
+total         = max(0, subtotal - promo - loyalty)
+```
+Khuyến mãi (`promo`) và voucher ví (`loyalty`) chỉ được trừ tối đa trong phần giá cơ bản `capBase`, tuyệt đối không trừ lấn vào phụ thu giờ thêm (`extraFee`), phụ thu khách (`extraGuestFee`) hoặc phụ thu lễ (`holidaySurcharge`).
+
+---
+
+## 3. Booking Session State Machine (`everyinn-agent-core/src/sessions/machine.ts`)
+
+10 trạng thái (`SESSION_STATUSES`) được thực thi tuần tự qua Durable Object `BookingSessionLive` (một actor mỗi `sessionId`) kết hợp compare-and-set trên cột `version` trong D1:
+
+- **LIVE (đang giữ slot phòng)**: `holding`, `awaiting_payment`, `payment_claimed`, `underpaid`
+- **FINAL (đã chốt/đóng hẳn)**: `confirmed`, `cancelled`, `conflict`
+- **Tạm dừng / Có thể khôi phục**: `expired`, `confirming`, `late_payment`
 
 ```mermaid
 stateDiagram-v2
-    [*] --> HOLD_ACTIVE: Khách bấm "Đặt phòng ngay"\n(ttlSeconds = 600 / 10 phút)\n📲 TG: [GIỮ PHÒNG MỚI]
+    [*] --> holding: HOLD_CREATED\nWeb TTL 10p / Admin TTL 15p
 
-    HOLD_ACTIVE --> AWAITING_PAYMENT: Khách điền form & bấm "Tiếp tục"\n(Lưu draft + Sinh mã EIPAY...)\n📲 TG: [CHỜ THANH TOÁN]
-    HOLD_ACTIVE --> HOLD_CANCELLED: Khách bấm "Đổi phòng khác"
-    HOLD_ACTIVE --> HOLD_EXPIRED: Quá 10 phút chưa điền xong\n(Tự động giải phóng slot)
+    holding --> awaiting_payment: GUEST_SAVED\n(Lưu khách + sinh EIPAY + lease voucher)
+    holding --> cancelled: GUEST_CANCELLED / OWNER_REVOKED
+    holding --> expired: EXPIRED (DO alarm / cron)
 
-    AWAITING_PAYMENT --> PAYMENT_CLAIMED: Khách bấm "Tôi đã chuyển khoản"\n(Bắt đầu Near-Realtime Polling 3-4s)\n📲 TG: [KHÁCH BÁO ĐÃ CK + Nút Duyệt]
-    AWAITING_PAYMENT --> BOOKING_CONFIRMED: Webhook ngân hàng bắn về khớp EIPAY...\n📲 TG: [TỰ ĐỘNG XÁC NHẬN QUA WEBHOOK]
-    AWAITING_PAYMENT --> HOLD_EXPIRED: Quá 10 phút chưa chuyển khoản
+    awaiting_payment --> awaiting_payment: GUEST_SAVED (Sửa form / đổi mã / đổi voucher)
+    awaiting_payment --> payment_claimed: GUEST_CLAIMED_PAID\n(+claimGraceMinutes 30p, trần <= checkinAt & +12h)
+    awaiting_payment --> confirming: OWNER_CONFIRMED (✅) hoặc\nPAYMENT_RECEIVED (paidEnough = true)
+    awaiting_payment --> underpaid: PAYMENT_RECEIVED (paidEnough = false)
+    awaiting_payment --> cancelled: GUEST_CANCELLED / OWNER_REVOKED
+    awaiting_payment --> expired: EXPIRED
 
-    PAYMENT_CLAIMED --> BOOKING_CONFIRMED: Quản lý bấm [✅ Đã nhận đủ] trên Telegram\n(Tạo Booking + Tích điểm CDP + Nhắc Quản lý cài pass)\nTrình duyệt khách poll nhận confirmed -> Điều hướng
-    PAYMENT_CLAIMED --> AWAITING_PAYMENT: Quản lý bấm [❌ Chưa nhận được tiền]
+    payment_claimed --> payment_claimed: GUEST_CLAIMED_PAID (Nhắc lại)
+    payment_claimed --> confirming: OWNER_CONFIRMED (✅) hoặc\nPAYMENT_RECEIVED (paidEnough = true)
+    payment_claimed --> awaiting_payment: OWNER_REJECTED (Lần 1, chưa có tiền vào)
+    payment_claimed --> underpaid: OWNER_REJECTED (khi hasPaidPart = true) hoặc\nPAYMENT_RECEIVED (paidEnough = false)
+    payment_claimed --> cancelled: OWNER_REJECTED (Lần >= 2) / OWNER_REVOKED
+    payment_claimed --> expired: EXPIRED
 
-    BOOKING_CONFIRMED --> CHECKIN_READY: Hệ thống liên kết <pass_cổng># & <pass lock box>\nKhách mở trang /checkin (>= 2 keys) xem 4 phần hướng dẫn
+    underpaid --> confirming: OWNER_CONFIRMED / OWNER_ACCEPT_SHORT /\nPAYMENT_RECEIVED (paidEnough = true)
+    underpaid --> payment_claimed: GUEST_CLAIMED_PAID ("Tôi đã chuyển bù")
+    underpaid --> underpaid: OWNER_REQUEST_TOPUP / PAYMENT_RECEIVED (thiếu)
+    underpaid --> cancelled: OWNER_REVOKED
+    underpaid --> expired: EXPIRED
+
+    confirming --> confirmed: CONFIRM_SUCCEEDED\n(Tạo Booking + redeem voucher + nhắc mã cửa)
+    confirming --> late_payment: CONFIRM_FAILED (Hold đã hết hạn trước lúc ✅)
+
+    expired --> late_payment: PAYMENT_RECEIVED / LATE_CLAIM / GUEST_CLAIMED_PAID
+    cancelled --> late_payment: PAYMENT_RECEIVED
+
+    late_payment --> confirming: RESTORE (Còn slot trống -> re-hold -> confirm)
+    late_payment --> conflict: RESTORE_FAILED (Slot đã có khách khác)
+    late_payment --> expired: OWNER_REJECTED
+    late_payment --> late_payment: PAYMENT_RECEIVED
 ```
 
 ---
 
-### 2.4. Rate Limiting Data Structures (`rateLimit.ts`)
+## 4. Rate Limiting 2 Lớp & Phone-First Hold Constraints
 
-```typescript
-export interface RateLimitEntry {
-  count: number;
-  resetAtMs: number;
-}
+### 4.1. Lớp 1 — Cloudflare Workers Rate Limiting (`every-inn-booking/wrangler.jsonc`)
 
-export type RateLimitAction = 'SEARCH' | 'CREATE_HOLD' | 'NOTIFY_PAID' | 'CHECKIN_LOOKUP';
+| Binding | Window | Limit | Key | Endpoints sử dụng |
+|---|---|---|---|---|
+| `SEARCH_RL` | `60s` | `30` | `CF-Connecting-IP` | `GET /api/guest/storefront`, `POST /api/guest/availability`, `POST /api/guest/sessions/[token]/preview` |
+| `HOLD_RL` | `60s` | `3` | `CF-Connecting-IP` | `POST /api/guest/sessions` |
+| `PAID_RL` | `60s` | `5` | `paid:${token.slice(0,16)}` | `POST /api/guest/sessions/[token]/paid` |
+| `LOOKUP_RL` | `60s` | `5` | `CF-Connecting-IP` | `POST /api/guest/checkin/lookup` (mọi lần gọi) |
 
-export interface RateLimitConfig {
-  limit: number;
-  windowSec: number;
-}
-```
+### 4.2. Lớp 2 — D1 `AGENT_DB` (`rate_counters` & `booking_sessions`)
+
+1. **Giới hạn giữ phòng theo SĐT (`phone_hash`) — Phone-First Hold**:
+   - Bắt buộc khách nhập SĐT hợp lệ ở `PhoneHoldModal` trước khi gọi `POST /api/guest/sessions`.
+   - `phone_hash = sha256Hex(hmacOrSalted('phone', normalizeVnPhone(phone)))` (1 chiều, không lưu raw E.164 vào cột index).
+   - Mỗi `phone_hash` chỉ được có **tối đa `1` phiên thuộc nhóm `LIVE`** (`holding`, `awaiting_payment`, `payment_claimed`, `underpaid`).
+   - Nếu trùng khi `forceSwitch = false`: trả `409 ANOTHER_SESSION_LIVE` kèm `{ existingSessionId, existingRoomLabel, expiresAt, remainingSeconds, liveSessions }`. Khi khách bấm `"Đổi sang phòng này"` (`forceSwitch: true`), engine huỷ phiên cũ (nhả hold + voucher) rồi giữ phòng mới.
+2. **Giới hạn giữ phòng theo IP (`ip_hash`)**:
+   - Truy vấn đếm phiên `LIVE` có `ip_hash`: tối đa `maxLiveHoldsPerIp = 2` (kênh `web`), `10` (kênh `admin`), cấu hình trong `master_data` (`booking_channels`).
+3. **Chống brute-force `/checkin` (`rate_counters`)**:
+   - Key: `ckfail:${ipHash}` trong bảng `rate_counters (key, window_start, count)`.
+   - `peekCounter(db, key, 900)`: kiểm tra trước khi gọi Core; nếu `>= 5` trả ngay `429 RATE_LIMIT_EXCEEDED` (`retryAfterSeconds: 900`).
+   - `hitCounter(db, key, 900)`: chỉ tăng khi xác thực thất bại (`404 GUEST_LOOKUP_NO_MATCH`, trả kèm `details.attemptsLeft = 5 - n`). Cron 5 phút dọn các bucket hết hạn.
 
 ---
 
-### 2.5. Cấu trúc Dữ liệu Xác thực Đa Khóa & Hướng dẫn Check-in (`/checkin`)
+## 5. Xác thực Đa Khóa & Cửa sổ Hiển thị Mã Cửa (`/checkin`)
 
-#### Request: `GuestCheckinLookupRequest`
-Khách phải cung cấp **Khóa 1 (`phone`)** kết hợp với **ít nhất 1 khóa thứ hai** trong danh sách:
+### 5.1. Request `checkinLookup` (`every-inn-booking/src/app/api/guest/checkin/lookup/route.ts`)
+
 ```typescript
 export interface GuestCheckinLookupRequest {
-  /** Khóa 1 (Bắt buộc): Số điện thoại di động Việt Nam đã đặt phòng */
-  phone: string;
-
-  /**
-   * Khóa 2 (Bắt buộc ít nhất 1 trong các tùy chọn):
-   */
-  bookingCodeOrPaymentRef?: string; // Mã đơn "EI-..." hoặc mã thanh toán "EIPAY..."
-  socialHandle?: string;            // Username/Link Zalo, Instagram, Facebook đã nhập lúc đặt
-  checkinDateAndRoom?: {            // Ngày nhận phòng (YYYY-MM-DD) + Số phòng (101..302)
-    checkinDate: string;
-    roomId: string;
-  };
+  phone: string; // Khóa 1 (bắt buộc)
+  secondKeyType: "booking_ref" | "social" | "checkin_date_room";
+  secondKeyValue?: string; // Dùng cho booking_ref ("EI-..." | "EIPAY...") hoặc social (Zalo/IG/FB)
+  checkinDate?: string;    // "YYYY-MM-DD" (khi secondKeyType === "checkin_date_room")
+  roomNumber?: string;     // "101".."302"
 }
 ```
+Hỗ trợ mọi đơn `confirmed` trên mọi kênh (`web`, `admin`, `chat`) — Quyết định D13.
 
-#### Response: `GuestCheckinGuidePayload`
-Khi xác thực thành công ($\ge 2$ khóa trùng khớp), API trả về:
+### 5.2. Response & Quy tắc Ẩn/Hiện Mã (`everyinn-agent-core/src/sessions/checkinAccess.ts`)
 
 ```typescript
 export interface GuestCheckinGuidePayload {
   booking: {
     id: string;
-    roomId: string;               // <số phòng> (VD: "202")
-    roomName: string;             // VD: "Signature 202"
-    bookingType: 'hourly' | 'overnight' | 'dayuse';
-    checkinAt: string;            // ISO +07:00
-    checkoutAt: string;           // ISO +07:00
+    roomId: string;
+    roomNumber: string | null;
+    roomName: string | null;
+    bookingType: string;
+    checkinAt: string;
+    checkoutAt: string;
     numGuests: number;
-    guestNameMasked: string;      // VD: "Nguyễn V** A"
+    guestNameMasked: string;
+    status: string;
+    remainingAmount: number;
   };
   accessCodes: {
-    ready: boolean;               // true nếu đã có mã cổng & hộp khóa
-    gateCode: string | null;      // <pass_cổng> (VD: "1234")
-    gateCodeFormatted: string | null; // "<pass_cổng>#" (VD: "1234#")
-    lockboxCode: string | null;   // <pass lock box> (VD: "5678")
-    wifiSsid: string;             // "DGH"
-    wifiPassword: string;         // "0906314109"
-    pendingNote?: string;
+    ready: boolean;
+    visible: boolean;           // true chỉ khi status === 'confirmed' && now ∈ [visibleFrom, checkoutAt + 2h]
+    visibleFrom: string;        // checkinAt - codesVisibleHoursBefore * 3_600_000 (hiện tại seed = 6h)
+    gateCode: string | null;    // null ngoài cửa sổ hoặc khi chưa có mã; giữ trong AGENT_DB (AES-GCM)
+    lockboxCode: string | null; // null ngoài cửa sổ hoặc khi chưa có mã
+    wifiName: string | null;
+    wifiPassword: string | null;// null nếu !ready
+    pendingNote: string | null;
   };
-  /**
-   * 4 phần nội dung chuẩn theo đúng thứ tự cố định của Every Inn
-   */
   guideBlocks: {
-    step1MainText: string;        // Toàn bộ văn bản hướng dẫn đã thay <pass_cổng>#, <số phòng>, <pass lock box>
-    step1GoogleMapsUrl: string;   // "https://maps.app.goo.gl/CV7RM9akRpGEx8Ds8?g_st=ic"
-    step2Images: {
-      checkinImageUrl: string;    // "/checkin-guide/checkin-guide.jpg"
-      checkinImageAlt: string;
-      checkoutImageUrl: string;   // "/checkin-guide/checkout-guide.jpg"
-      checkoutImageAlt: string;
-    };
-    step3TaxiText: string;        // "Nếu bạn đi taxi hãy book xe đến 71/31 Nguyễn Công Hoan là đầu hẻm, và mình đi bộ vào khoảng 30m như clip hướng dẫn là đến ạ"
-    step3TaxiDropoffAddress: string; // "71/31 Nguyễn Công Hoan, Phường Cầu Kiệu, Phú Nhuận, TP.HCM"
-    step4Video: {
-      videoUrl: string;           // "/checkin-guide/taxi-alley-guide.mp4"
-      posterUrl: string;          // "/checkin-guide/checkin-guide.jpg"
-      caption: string;
-    };
+    step1MainText: string;      // Đã thay biến {gate_code}, {room_number}, {lockbox_code}, {wifi_name}, {wifi_password}, {maps_url} (hoặc "••••")
+    step1GoogleMapsUrl: string | null;
+    step2Images: { checkinImageUrl: string | null; checkinImageAlt: string; checkoutImageUrl: string | null; checkoutImageAlt: string };
+    step3TaxiText: string | null;
+    step3TaxiDropoffAddress: string | null;
+    step4Video: { videoUrl: string | null; posterUrl: string | null; caption: string };
   };
 }
 ```
+- **Lưu ý `codesVisibleHoursBefore`**: Seed hiện tại trong [defaults.ts](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/everyinn-agent-core/src/masterdata/defaults.ts) và [policy.ts](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/everyinn-agent-core/src/sessions/policy.ts) là **`6` tiếng** (mục TODO #5 của Owner xem xét giữ `6h` hoặc đổi về `2h`). Media (`checkinImageUrl`, `checkoutImageUrl`, `videoUrl`) hiện là `null` trong seed và do `LSB-7` điền URL từ Admin.
 
 ---
 
-## 3. D1 Schema & Database Extensions (`BOOKING_DB`)
+## 6. Schema D1 thực tế qua các Migrations (4 migrations đã triển khai)
 
-### 3.1. DDL Bảng `calendar_rate_overrides` (Dynamic Daily Rate Overrides)
-Bảng ghi đè giá bán cơ bản theo ngày, phục vụ tính năng điều chỉnh giá trực tiếp trên Calendar OTA:
+### 6.1. `BOOKING_DB` — `everyinn-booking-core/migrations/0010_booking_sessions_channel.sql`
+- `room_holds`: `+ channel TEXT`, `+ session_id TEXT`, index `idx_room_holds_session`.
+- `bookings`: `+ channel TEXT`, `+ session_id TEXT`, `+ voucher_code TEXT`, `+ voucher_value INTEGER NOT NULL DEFAULT 0 CHECK (voucher_value >= 0)`, index `idx_bookings_session`.
+- `booking_audit_events`: `+ caller TEXT`.
+- `manual_financial_entries`: `+ external_ref TEXT`.
+- `booking_configs`: insert row `'overnight_shifts'` chứa JSON 4 ca `21-9`, `22-10`, `23-11`, `24-12`, `window_start: "21:00"`, `window_end: "12:00"`, `max_addon_hours: 3`.
 
+### 6.2. `BOOKING_DB` — `everyinn-booking-core/migrations/0011_calendar_rates.sql`
 ```sql
-CREATE TABLE IF NOT EXISTS calendar_rate_overrides (
-  id TEXT PRIMARY KEY,                       -- UUID v4
-  property_id TEXT NOT NULL,                -- 'everyinn-phunhuan'
-  room_id TEXT,                             -- NULL nếu áp dụng cho toàn bộ hạng phòng; hoặc 'hav-101'..'sig-302'
-  room_class TEXT NOT NULL,                 -- 'haven' | 'signature'
-  rate_plan_code TEXT NOT NULL,             -- 'hourly_combo3h' | 'overnight_standard' | 'daily_standard'
-  override_date TEXT NOT NULL,              -- 'YYYY-MM-DD' theo giờ VN (+07:00)
-  custom_base_price INTEGER NOT NULL,       -- Giá cơ bản mới (VNĐ), thay thế P_base trong Core v2.0
-  note TEXT,                                -- Ghi chú nội bộ (VD: "Giá Black Friday", "Chốt khách quen")
-  is_active INTEGER NOT NULL DEFAULT 1,     -- 1: Bật; 0: Tắt (khôi phục giá gốc)
-  version INTEGER NOT NULL DEFAULT 1,       -- Optimistic concurrency lock
-  created_at TEXT NOT NULL,                 -- ISO UTC
-  updated_at TEXT NOT NULL                  -- ISO UTC
+CREATE TABLE IF NOT EXISTS rate_overrides (
+  id                     TEXT PRIMARY KEY,                       -- "rov_<uuid>"
+  property_id            TEXT NOT NULL REFERENCES properties(id),
+  room_scope             TEXT NOT NULL,                          -- room id hoặc '*' (toàn hạng)
+  room_class             TEXT NOT NULL CHECK (room_class IN ('haven', 'signature')),
+  rate_plan_code         TEXT NOT NULL CHECK (rate_plan_code IN ('combo3h', 'overnight', 'dayroom')),
+  override_date          TEXT NOT NULL,                          -- YYYY-MM-DD (giờ VN)
+  custom_base_price      INTEGER NOT NULL CHECK (custom_base_price >= 0),
+  note                   TEXT,
+  is_active              INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+  version                INTEGER NOT NULL DEFAULT 1,
+  created_by_staff_id    INTEGER,
+  created_by_staff_name  TEXT,
+  updated_by_staff_id    INTEGER,
+  updated_by_staff_name  TEXT,
+  created_at             TEXT NOT NULL,
+  updated_at             TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rate_overrides_scope
+  ON rate_overrides(property_id, room_scope, room_class, rate_plan_code, override_date);
+CREATE INDEX IF NOT EXISTS idx_rate_overrides_active_date
+  ON rate_overrides(property_id, override_date) WHERE is_active = 1;
 
--- Index tối ưu truy vấn kiểm tra giá trong < 1ms CPU
-CREATE UNIQUE INDEX IF NOT EXISTS uq_rate_override_scope
-  ON calendar_rate_overrides (property_id, COALESCE(room_id, '__ALL__'), room_class, rate_plan_code, override_date);
-
-CREATE INDEX IF NOT EXISTS idx_rate_overrides_lookup
-  ON calendar_rate_overrides (property_id, room_class, rate_plan_code, override_date)
-  WHERE is_active = 1;
+ALTER TABLE room_blocks ADD COLUMN block_type TEXT NOT NULL DEFAULT 'maintenance'
+  CHECK (block_type IN ('stop_sell', 'maintenance', 'owner_stay', 'deep_cleaning'));
 ```
 
-### 3.2. Cấu hình Cửa Sổ Nhận Đặt Trước Luân Phiên (`booking_configs`)
-Thêm trường `max_advance_days` vào bảng cấu hình hệ thống:
-
+### 6.3. `CDP_DB` — `everyinn-cdp-core/migrations/0004_customer_vouchers.sql`
 ```sql
--- Migration bổ sung nếu bảng đã tồn tại
-ALTER TABLE booking_configs ADD COLUMN max_advance_days INTEGER NOT NULL DEFAULT 90;
-
--- Hoặc DDL đầy đủ
-CREATE TABLE IF NOT EXISTS booking_configs (
-  property_id TEXT PRIMARY KEY,             -- 'everyinn-phunhuan'
-  max_advance_days INTEGER NOT NULL DEFAULT 90, -- 60 (2 tháng), 90 (3 tháng), 180 (6 tháng), 365 (1 năm)
-  min_advance_hours INTEGER NOT NULL DEFAULT 0,  -- Số giờ báo trước tối thiểu (0 = cho phép đặt ngay)
-  turnover_minutes INTEGER NOT NULL DEFAULT 60,  -- Bất biến 60 phút dọn phòng
-  updated_at TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS customer_vouchers (
+  voucher_id          TEXT PRIMARY KEY,                 -- "vch_<uuid>"
+  customer_id         TEXT NOT NULL REFERENCES customers(customer_id),
+  code                TEXT NOT NULL UNIQUE,             -- "TEM3-8KQ2"
+  promotion_id        TEXT,                             -- Booking Core template promotion
+  value               INTEGER NOT NULL CHECK (value >= 0),
+  label               TEXT NOT NULL,
+  source              TEXT NOT NULL CHECK (source IN ('stamp_milestone', 'manual')),
+  source_booking_id   TEXT,
+  source_step         INTEGER,
+  status              TEXT NOT NULL DEFAULT 'issued' CHECK (status IN ('issued', 'reserved', 'redeemed', 'void')),
+  reserved_for_hold   TEXT,
+  reserved_until      TEXT,
+  redeemed_booking_id TEXT,
+  redeemed_at         TEXT,
+  expires_at          TEXT NOT NULL,
+  version             INTEGER NOT NULL DEFAULT 1,
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_vouchers_customer ON customer_vouchers(customer_id, status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_vouchers_hold ON customer_vouchers(reserved_for_hold) WHERE reserved_for_hold IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_vouchers_redeemed ON customer_vouchers(redeemed_booking_id) WHERE redeemed_booking_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_vouchers_source ON customer_vouchers(source_booking_id, source_step) WHERE source = 'stamp_milestone';
 ```
 
-### 3.3. Quản Trị Đóng / Mở Bán Phòng (`room_blocks`)
-Bảng ghi nhận các khoảng thời gian đóng phòng chủ động (Stop-Sell / Bảo trì / Chủ nhà ở):
-
-```sql
-CREATE TABLE IF NOT EXISTS room_blocks (
-  id TEXT PRIMARY KEY,                       -- UUID v4
-  property_id TEXT NOT NULL,                -- 'everyinn-phunhuan'
-  room_id TEXT NOT NULL,                    -- 'hav-101'..'sig-302' hoặc '*' (tất cả phòng)
-  block_type TEXT NOT NULL,                 -- 'stop_sell' | 'maintenance' | 'owner_stay' | 'deep_cleaning'
-  start_at TEXT NOT NULL,                   -- ISO +07:00
-  end_at TEXT NOT NULL,                     -- ISO +07:00
-  reason TEXT,                              -- Diễn giải cho nhân viên
-  created_by TEXT NOT NULL,                 -- 'admin-dashboard' | 'telegram-owner'
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_room_blocks_window
-  ON room_blocks (property_id, room_id, start_at, end_at);
-```
+### 6.4. `AGENT_DB` — `everyinn-agent-core/migrations/0021_booking_sessions.sql`
+6 bảng mới & trigger append-only:
+- `booking_sessions`: 1 hàng mỗi phiên (`id`, `channel`, `status`, `token_hash` `UNIQUE`, `hold_id`, `booking_id`, `room_id`, `room_label`, `booking_type`, `shift`, `checkin_at`, `checkout_at`, `early_hours`, `late_hours`, `num_guests`, `amount_due`, `paid_amount`, `payment_reference`, `guest_name`, `phone_hash`, `phone_masked`, `guest_json`, `pricing_json`, `ip_hash`, `reject_count`, `expires_at`, `status_card_chat`, `status_card_msg`, `action_card_msg`, `prompt_msg`, `created_by_staff_id`, `created_by_name`, `codes_checked_at`, `version`, `created_at`, `updated_at`) cùng 8 index (`idx_sessions_status_expires`, `idx_sessions_hold`, `idx_sessions_booking`, `idx_sessions_phone`, `idx_sessions_ip`, `idx_sessions_reference`, `idx_sessions_prompt`, `idx_sessions_created`).
+- `session_events`: nhật ký bất biến + trigger `session_events_no_update` và `session_events_no_delete`.
+- `session_payments`: sổ thu tiền phiên bất biến (`UNIQUE (provider, provider_txn_id)` + trigger `session_payments_no_update`).
+- `payment_intents`: `kind IN ('vietqr', 'redirect')`, `status IN ('open', 'paid', 'superseded', 'cancelled')`.
+- `payment_webhook_inbox`: log webhook đã lọc PII (`UNIQUE (provider, provider_txn_id)`).
+- `rate_counters`: bảng đếm sliding-window `WITHOUT ROWID` (`PRIMARY KEY (key, window_start)`).
 
 ---
 
-## 4. OTA Calendar Extranet Data Transfer Objects (DTOs)
+## 7. OTA Calendar Extranet & Booking Window DTOs (`everyinn-booking-core/src/handlers/calendar.ts`)
 
-### 4.1. `CalendarMatrixDTO` (Ma trận Lịch phòng & Giá bán)
-Dữ liệu hiển thị lưới ngày x phòng trên giao diện Quản trị:
+### 7.1. `CalendarMatrixResponse` (`GET /internal/v1/calendar/matrix?from=&to=`, tối đa 62 ngày)
 
 ```typescript
-export interface CalendarDateCellDTO {
-  date: string;                             // 'YYYY-MM-DD'
-  isWithinAdvanceWindow: boolean;           // true nếu date <= today + max_advance_days
-  isStopSell: boolean;                      // true nếu phòng bị đóng bán trong ngày
-  stopSellReason?: 'stop_sell' | 'maintenance' | 'owner_stay' | 'deep_cleaning';
-  blockId?: string;
-  occupancyStatus: 'vacant' | 'occupied' | 'partial_hold' | 'turnover_blocked';
-  baseRates: {
-    hourly_combo3h: number;                 // VNĐ
-    overnight_standard: number;             // VNĐ
-    daily_standard: number;                 // VNĐ
-  };
-  activeOverrides: {
+export type BlockType = "stop_sell" | "maintenance" | "owner_stay" | "deep_cleaning";
+export type CalendarRatePlan = "combo3h" | "overnight" | "dayroom";
+
+export interface CalendarDayCell {
+  date: string;                         // YYYY-MM-DD (giờ VN)
+  bookable: boolean;                    // today <= date <= bookingWindow.maxDate
+  rates: Record<
+    CalendarRatePlan,
+    {
+      price: number | null;
+      listPrice: number | null;
+      override: { id: string; scope: "room" | "class"; note: string | null } | null;
+    }
+  >;
+  closures: {
     id: string;
-    ratePlanCode: 'hourly_combo3h' | 'overnight_standard' | 'daily_standard';
-    customBasePrice: number;
-    note?: string;
+    blockType: BlockType;
+    reason: string | null;
+    from: string;
+    to: string;
+    version: number;
+  }[];
+  bookings: number;
+  holds: number;
+  occupancyPct: number;                 // 0..100
+}
+
+export interface CalendarMatrixResponse {
+  from: string;
+  to: string;
+  today: string;
+  bookingWindow: { maxAdvanceDays: number; maxDate: string };
+  ratePlans: CalendarRatePlan[];
+  blockTypes: { code: BlockType; label: string }[];
+  rooms: {
+    id: string;
+    name: string;
+    roomNumber: string;
+    roomClass: "haven" | "signature";
+    days: CalendarDayCell[];
   }[];
 }
-
-export interface CalendarRoomRowDTO {
-  roomId: string;                           // 'hav-101'..'sig-302'
-  roomName: string;                         // 'Haven 101'..'Signature 302'
-  roomClass: 'haven' | 'signature';
-  dates: Record<string, CalendarDateCellDTO>; // Key là YYYY-MM-DD
-}
-
-export interface CalendarMatrixResponseDTO {
-  propertyId: string;
-  startDate: string;                        // YYYY-MM-DD
-  endDate: string;                          // YYYY-MM-DD
-  maxAdvanceDays: number;                   // Cấu hình hiện tại (VD: 90)
-  maxAdvanceDateAllowed: string;            // Ngày xa nhất khách có thể đặt
-  rooms: CalendarRoomRowDTO[];
-}
 ```
 
-### 4.2. `RateOverrideInputDTO` & `StopSellInputDTO`
+### 7.2. Input DTOs cho Rate Overrides, Bulk Stop-Sell & Booking Rules
 
 ```typescript
-export interface RateOverrideInputDTO {
-  propertyId: string;
-  roomClass: 'haven' | 'signature';
-  roomId?: string | null;                   // null = áp dụng toàn hạng phòng
-  ratePlanCode: 'hourly_combo3h' | 'overnight_standard' | 'daily_standard';
-  startDate: string;                        // 'YYYY-MM-DD'
-  endDate: string;                          // 'YYYY-MM-DD' (hỗ trợ áp dụng theo dải ngày)
-  customBasePrice: number;                  // VNĐ
+export interface SetRateOverridesInput {
+  roomClass: "haven" | "signature";
+  roomId?: string | null;               // null = room_scope '*' (cả hạng)
+  ratePlanCode?: CalendarRatePlan;      // Hoặc dùng ratePlanCodes[]
+  ratePlanCodes?: CalendarRatePlan[];
+  fromDate: string;                     // YYYY-MM-DD (>= today VN, tối đa 366 ngày/lần)
+  toDate: string;                       // YYYY-MM-DD
+  weekdays?: number[];                  // 0 (CN) .. 6 (T7)
+  customBasePrice: number;              // VNĐ (>= 0)
   note?: string;
 }
 
-export interface StopSellInputDTO {
-  propertyId: string;
-  roomIds: string[];                        // Danh sách phòng cần đóng (['*'] nếu tất cả)
-  blockType: 'stop_sell' | 'maintenance' | 'owner_stay' | 'deep_cleaning';
-  startDate: string;                        // 'YYYY-MM-DD' hoặc ISO
-  endDate: string;                          // 'YYYY-MM-DD' hoặc ISO
+export interface BulkCreateBlocksInput {
+  roomIds: string[] | ["*"];
+  blockType: BlockType;
+  blockedFrom: string;                  // UTC ISO (căn bước 30 phút; tối đa 31 ngày/lần)
+  blockedTo: string;                    // UTC ISO
   reason?: string;
+  note?: string;
+  skipConflicts?: boolean;              // true: bỏ qua phòng đang có khách và trả về trong skipped[]
 }
 
-export interface AdvanceBookingConfigDTO {
-  propertyId: string;
-  maxAdvanceDays: 60 | 90 | 180 | 365 | number; // 2 tháng, 3 tháng, 6 tháng, 1 năm
+// Cập nhật cửa sổ đặt trước qua PUT /internal/v1/configs/booking_rules
+export interface UpdateBookingRulesBody {
+  expectedVersion: number;
+  value: {
+    max_advance_days: number;           // Số ngày dương lịch VN (1..730, mặc định 90)
+    // kèm các thuộc tính khác của booking_rules
+  };
 }
 ```
+> **Cửa sổ đặt trước (Rolling Advance Window)**: Tính bằng **ngày dương lịch theo múi giờ Việt Nam (`Asia/Ho_Chi_Minh`)** (`maxAdvanceDate(rules, nowMs) = addBusinessDays(todayVn, max_advance_days)` — hàm giữ tên `addBusinessDays` nhưng cộng `n × 24h` ngày dương lịch). Chặn `422 ADVANCE_BOOKING_EXCEEDED` với `landing-bff` & `agent-core`, còn `admin` nhận `warnings[]` (D11).

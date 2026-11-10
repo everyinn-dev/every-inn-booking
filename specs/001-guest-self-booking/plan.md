@@ -1,53 +1,64 @@
 # Implementation Plan: Guest Self-Booking, Payment & Self Check-in Landing Page
 
-- **Branch**: `001-guest-self-booking`
-- **Date**: 2026-04-20
-- **Version**: 2.0.0 (Updated to Core Pricing v2.0, Real-world Operational Metrics & Edge Security)
-- **Last Updated**: 2026-11-08
-- **Spec**: [spec.md](file:///Users/lap14666/Documents/private/every%20inn/van%20hanh/booking-page/every-inn-booking/specs/001-guest-self-booking/spec.md)
+- **Branch**: `feat/landing-self-booking` (Spec-Kit `001-guest-self-booking`)
+- **Version**: 3.0.0 (Aligned 100% with [source-of-truth.md](./source-of-truth.md) and actual codebase)
+- **Last Updated**: 2026-11-10
+- **Spec**: [spec.md](./spec.md)
 - **Target Services**:
-  1. `every-inn-booking` (`saigonliving` — Public Next.js 16 + OpenNext Worker on Cloudflare)
+  1. `every-inn-booking` (`saigonliving` / `saigonliving-dev` — Public Next.js 16 + OpenNext Worker on Cloudflare)
   2. `everyinn-booking-core` (Internal Booking Worker + `BOOKING_DB`)
-  3. `everyinn-cdp-core` (Internal CDP Worker + `CDP_DB`)
-  4. `everyinn-agent-core` (Internal Door-Code Vault & Telegram Operations Worker + `AGENT_DB`)
+  3. `everyinn-cdp-core` (Internal CDP & Voucher Wallet Worker + `CDP_DB`)
+  4. `everyinn-agent-core` (Session Engine, Durable Objects, Payment Webhooks, Door-Code Vault & Telegram Ops + `AGENT_DB`)
+  5. `everyinn-admin` (Unified Admin Session Wizard & OTA Calendar Extranet)
+  6. `everyinn-platform-docs` (Contracts, Specs & `shared/booking-kit`)
 
 ---
 
 ## 1. Summary
 
-Xây dựng hệ thống **Tự đặt phòng, Thanh toán VietQR (Xác nhận qua Telegram / Webhook) & Tra cứu Hướng dẫn Self Check-in (`/checkin`)** ngay trên Landing Page của Every Inn (`every-inn-booking`).
+Hệ thống **Tự đặt phòng, Thanh toán VietQR (Telegram 1-Tap & Payment Webhook Port) & Tra cứu Check-in (`/checkin`)** được triển khai theo kiến trúc thống nhất xung quanh **Booking Session Engine** (`everyinn-agent-core`), dùng chung cho cả **Khách tự đặt trên Landing** (`web`) và **Lễ tân trên Admin** (`admin`):
 
-Giải pháp tận dụng kiến trúc Micro-Workers trên Cloudflare (thông qua **Service Bindings** độ trễ ~0ms, băng thông 0đ):
-1. **Tìm phòng trực quan & Nút thêm giờ linh hoạt**: Mở rộng API tìm phòng trả về các nút mua thêm giờ nhận sớm/trả muộn trên từng thẻ phòng qua đêm theo đơn giá niêm yết **`60.000đ/giờ`** chỉ trong 1 truy vấn D1 duy nhất.
-2. **Core Pricing v2.0 & Multi-Tier Promotions**: Áp dụng chuẩn công thức tính giá và stacking policy: $T_{\text{total}} = \max(0, P_{\text{base}} - D_{\text{promo}} - D_{\text{loyalty}}) + S_{\text{holiday}} + S_{\text{extra\_hours}} + S_{\text{extra\_guests}}$. Hỗ trợ cả khuyến mãi công khai (**Public**) và mã giảm giá (**Private**), kết hợp hạng thẻ thành viên CDP và quà tặng từ chu kỳ tích tem.
-3. **Thanh toán VietQR & Near-Realtime**: Màn hình thanh toán hỗ trợ **Adaptive Short Polling (3–4s)** giúp cập nhật trạng thái tức thời khi Quản lý duyệt trên Telegram (hoặc ngân hàng bắn webhook).
-4. **Bảo mật & Rate Limit theo IP**: Sử dụng `CF-Connecting-IP` với cơ chế sliding window rate limiting chống bot cào quét lịch, flood giữ phòng rác và brute-force tra cứu mã khóa.
-5. **Không dùng AI Chatbot**: Luồng đặt phòng hoàn toàn tự phục vụ qua Web UI; Telegram bot chỉ làm nhiệm vụ gửi thông báo và nút duyệt cho Quản lý (Human Manager).
-6. **Quản trị Lịch phòng & Giá bán kiểu OTA (Calendar Extranet)**: Cung cấp giao diện ma trận phòng / ngày cho Admin chủ động Đóng / Mở bán (Stop-Sell / Room Blocks), Điều chỉnh giá trực tiếp (Dynamic Daily Rate Overrides) cho từng ngày/hạng phòng/ca, và cấu hình Cửa sổ nhận đặt phòng trước luân phiên (Rolling Advance Booking Window: 2 tháng, 3 tháng, 6 tháng, 1 năm) tự động dời mỗi ngày.
+1. **Ranh giới Đọc / Ghi tách bạch (Decision D1)**:
+   - `every-inn-booking` (`landing-bff`) chỉ gọi **`BOOKING_CORE` qua các route đọc** (`LANDING_READ`: `/storefront`, `/availability/search`, `/inventory/version`, `/quotes`, `/promotions/public`). Mọi thao tác **ghi phiên đặt phòng** và **tra cứu mã cửa `/checkin`** đi qua **`AGENT_CORE` entrypoint `LandingApi`** (`/internal/v1/web/*`, actor web `900002 / receptionist / Khách web`).
+2. **Phone-First Hold & `/dat-phong/<token>` Capability URL (Decision D5, 2026-11-09)**:
+   - Trên `/dat-phong` (`SearchPage.tsx`), bấm chọn phòng & `"Giữ phòng 10 phút"` sẽ mở `PhoneHoldModal` yêu cầu nhập SĐT Việt Nam trước khi tạo session.
+   - Mỗi phiên có capability token 32 byte (`base64url`), DB chỉ lưu SHA-256 `token_hash`; tối đa **1 phiên sống / `phone_hash`** (có `409 ANOTHER_SESSION_LIVE` + 1 chạm `Đổi sang phòng` với `forceSwitch: true`) và **2 phiên sống / `ip_hash`**.
+3. **Near-Realtime qua Durable Objects (Long-Poll 25s, Decision D3)**:
+   - `BookingSessionLive` (mỗi phiên 1 actor chạy lệnh tuần tự + arm alarm hết hạn) phục vụ `/api/guest/sessions/[token]/live?v=&timeout=25000` — cập nhật `< 1s` sau khi Quản lý duyệt Telegram hoặc nhận webhook ngân hàng.
+   - `InventoryPulse` (global DO) phục vụ `/api/guest/pulse?v=` để tự động làm mới kết quả tìm phòng, tô sáng phòng vừa đổi trạng thái và làm mờ phòng bận với nhãn `"Vừa được đặt"`. Client `useLongPoll` tự lùi về exponential backoff **4s → 30s** khi lỗi và tạm dừng khi tab ẩn.
+4. **Core Pricing v2.0, Stacking Fix & Ví Voucher CDP (Decision D7)**:
+   - Bước giờ nhận phòng theo giờ = **1 giờ chẵn (`:00`)** từ `08:00`–`21:00`, tối thiểu 3 giờ (`HOURLY_CHECKIN_STEP_INVALID` khi sai).
+   - Thẻ phòng qua đêm trả về `overnightAddons` (`+1h/+2h/+3h nhận sớm` hoặc `trả muộn`, `60.000đ/giờ`) kiểm tra 2 chiều 60p turnover trong 1 query `inventory_slots`.
+   - Công thức `stackDiscounts`: cả `promotionDiscount` lẫn voucher ví `customer_vouchers` (`TEM<step>-XXXX`) đều bị kẹp chặt trong `capBase = min(basePrice, subtotal)` — không trừ lấn vào phụ thu.
+5. **Thanh toán mở rộng & Thẻ Telegram tại chỗ (Decision D2, D9)**:
+   - Ngân hàng đọc động từ `BOOKING_DB.properties.bank_*`.
+   - Thẻ Telegram dùng callback `ss:<sid>:ok|no|amt|rv|rv!|keep|short|topup|restore` và `sm:<inbox>:<sid>`, không bao giờ in plaintext mã cửa.
+   - Endpoint `POST /webhooks/payments/:provider` (`sepay` | `casso` | `payos`) đặt trên **`everyinn-agent-core`** (public worker, trả `404` nếu chưa set secret).
+6. **OTA Calendar Extranet & Unified Admin (Decision D11, D14, D15, D16)**:
+   - `everyinn-admin` dùng chung Session Engine qua `AdminApi /internal/v1/sessions*` (Booking Core chặn `409 SESSION_MANAGED` nếu sửa hold của session bên ngoài).
+   - Trang `/calendar` quản trị `rate_overrides` (migration `0011`), `POST /room-blocks/bulk` (tối đa 31 ngày, hỗ trợ `skipConflicts`) và `PUT /configs/booking_rules` (`max_advance_days`, tính theo **ngày dương lịch VN**; Web bị chặn `422 ADVANCE_BOOKING_EXCEEDED`, Admin nhận `warnings[]`).
 
 ---
 
 ## 2. Technical Context & Operational Metrics
 
-| Thành phần | Đặc tả kỹ thuật & Số liệu thực tế |
+| Thành phần | Đặc tả kỹ thuật & Số liệu vận hành |
 | :--- | :--- |
-| **Quy mô Vận hành Thực tế** | - Lượng khách nhắn fanpage/zalo: **~20 khách/ngày**.<br>- Số booking hoàn tất trung bình: **~120 bookings/tháng** (~4 bookings/ngày).<br>- Lượt tìm kiếm phòng suy ra: **~50 – 150 lượt/ngày** (cao điểm 19h–23h khoảng 20–40 lượt/giờ). |
-| **Cloudflare Free Tier Quota** | - **100.000 requests/ngày** và CPU limit **10ms/invocation**.<br>- Tổng lưu lượng hệ thống (bao gồm cả near-realtime short polling) chỉ tốn **~1.500 – 3.000 requests/ngày** (< 3% quota), hoàn toàn an toàn và không lo cạn kiệt tài nguyên. |
-| **Frontend & Public BFF** | Next.js 16 (App Router) + React 19 + TypeScript 5 (`strict: true`) + Tailwind CSS v4, biên dịch qua `@opennextjs/cloudflare` chạy trên Cloudflare Workers (`saigonliving`). |
-| **Internal Core Services** | Cloudflare Workers (`everyinn-booking-core`, `everyinn-cdp-core`, `everyinn-agent-core`) với `workers_dev = false`, giao tiếp nội bộ qua **Cloudflare Service Bindings** (`env.BOOKING_CORE`, `env.CDP_CORE`, `env.AGENT_CORE`). |
-| **Database** | Cloudflare D1 (SQLite): `BOOKING_DB` (lịch phòng, holds, bookings, promotions), `CDP_DB` (khách hàng, hạng thẻ, tích tem), `AGENT_DB` (mã cửa AES-GCM, Telegram escalations). |
-| **Media Storage** | 2 Hình ảnh hướng dẫn checkin/checkout & video đường đi đầu hẻm 71/31 phục vụ qua Static Assets (`public/checkin-guide/`) với `preload="metadata"` và `playsInline`. |
+| **Lưu lượng thực tế & Free Tier** | ~20 khách hỏi/ngày, ~120 bookings/tháng (~4 đơn/ngày), 50–150 lượt tìm kiếm/ngày. Nhờ DO long-poll (`~1 req / 25s`) + ETag `304`, tổng request toàn hệ thống ước tính `< 3%` quota Cloudflare Workers Free Tier (`100.000 req/ngày`, CPU `< 10ms/req`). |
+| **Frontend & Public BFF** | Next.js `16.0.7` (App Router) + React `19.2.1` + TypeScript `5.9` (`strict: true`) + Tailwind CSS v4, build bằng `@opennextjs/cloudflare` (`saigonliving` / `saigonliving-dev`). |
+| **Feature Flag Prod (Rule R6)** | `WEB_BOOKING_ENABLED = "false"` ở top-level prod (`saigonliving`) cho đến khi Owner duyệt go-live; `env.dev` (`saigonliving-dev`) bật `"true"`. Khi `false`, `/dat-phong` render `<BookingDisabled />` và API `/api/guest/*` trả `503 FEATURE_DISABLED`. |
+| **Internal Core Workers & DOs** | `everyinn-booking-core`, `everyinn-cdp-core`, `everyinn-agent-core` (`AdminApi`, `LandingApi`, DO `BookingSessionLive` & `InventoryPulse`). Giao tiếp nội bộ qua Cloudflare Service Bindings (`x-ei-caller: landing-bff` / `admin-bff`). |
+| **Databases (D1)** | `BOOKING_DB` (`booking-core`), `CDP_DB` (`cdp-core`), `AGENT_DB` (`agent-core`). |
+| **Shared Kit (`everyinn-platform-docs`)** | `shared/booking-kit/{format,live,stay,types}.ts` được đồng bộ byte-identical sang `every-inn-booking/src/shared/booking-kit/` và `everyinn-admin/src/shared/booking-kit/` qua `scripts/sync-booking-kit.mjs`. |
 
 ---
 
 ## 3. Constitution & Platform Rules Check
 
-Thiết kế này tuân thủ 100% các quy tắc kiến trúc trong `everyinn-platform-docs/CONVENTIONS.md` và `rules/cloudflare-free-tier.md`:
-
-- [x] **Rule 1 — Service Boundary & Caller Auth**: `every-inn-booking` không truy cập trực tiếp vào DB của các Worker khác. Mọi thao tác đi qua Service Bindings với header `x-ei-caller: landing-bff` và `x-request-id: <uuid>`.
-- [x] **Rule 2 — Server-Authoritative Pricing v2.0**: Frontend tuyệt đối không tự tính giá chốt. Mọi giá cơ bản, phụ thu thêm giờ (`60.000đ/giờ`), phụ thu khách thứ 3 Signature (`150.000đ/khách`), phụ thu lễ và chiết khấu (Public Promo / Private Promo / CDP Loyalty Tier / Stamp Reward) đều do `everyinn-booking-core` tính toán và đóng băng (snapshot) khi tạo Hold.
-- [x] **Rule 3 — Door-Code Vault Isolation**: Mã cổng (`<pass_cổng>#`) và mã hộp khóa (`<pass lock box>`) chỉ nằm trong `AGENT_DB` (mã hóa AES-GCM). Không bao giờ lưu vào `BOOKING_DB` hay log ra console.
-- [x] **Rule 4 — 10ms CPU & Indexed Batch Queries**: Kiểm tra các nút thêm `1h/2h/3h` checkin sớm và checkout muộn cho cả 6 phòng Qua đêm được gom vào **1 câu truy vấn `inventory_slots` duy nhất** trong `everyinn-booking-core`, xử lý trên bộ nhớ trong `< 1ms` CPU.
+- [x] **Rule 1 — Service Boundary & Least Privilege**: `landing-bff` chỉ được phép gọi `LANDING_READ` routes trên `BOOKING_CORE` và `LandingApi` trên `AGENT_CORE`. Mọi token được tạo ngẫu nhiên 32 byte, chỉ lưu SHA-256 `token_hash` trong `AGENT_DB`.
+- [x] **Rule 2 — Server-Authoritative Re-derivation**: Client gửi tiêu chí (`kind`, `date`, `shift`, `start`, `hours`, `out`, `guests`); `every-inn-booking` `parseCriteria` + `criteriaStay` tự tính lại `checkinAt`/`checkoutAt` phía server, `BOOKING_CORE` tự tính giá và đóng băng tại hold/session.
+- [x] **Rule 3 — Door-Code Vault Isolation (D9)**: Mã cổng và hộp khóa mã hóa AES-GCM trong `AGENT_DB`, chỉ giải mã khi `status === 'confirmed'` và nằm trong `[checkinAt - codesVisibleHoursBefore, checkoutAt + 2h]`; không gửi lên Telegram hay ghi log.
+- [x] **Rule 4 — 10ms CPU & Indexed Batch Queries**: Nút thêm giờ qua đêm kiểm tra `[window_start, window_end]` bằng 1 batch query `inventory_slots`; toàn bộ thao tác `rate_overrides` & `room_blocks` dùng `db.batch()` và index có điều kiện.
 
 ---
 
@@ -57,330 +68,186 @@ Thiết kế này tuân thủ 100% các quy tắc kiến trúc trong `everyinn-p
 
 ```mermaid
 flowchart TB
-    subgraph GuestDevice["📱 Thiết bị Khách hàng (Mobile-First Web UI)"]
-        LP["Landing Page (/)\nSearch & Room Cards\n(Hourly 8h-21h / Overnight 4 Shifts / Day-Use)"]
-        CO["Checkout Page (/book/[holdId])\n10-Min Hold Timer + VietQR + Near-Realtime Polling"]
-        CI["Check-in Guide Page (/checkin)\nMulti-Key Verification + 4-Part Static/Dynamic Guide"]
+    subgraph Guest["📱 Thiết bị Khách hàng (Mobile-First)"]
+        HOME["/ (HomeBooking SearchBar)"]
+        SEARCH["/dat-phong\nSearchPage + PhoneHoldModal\n(Long-poll InventoryPulse)"]
+        CHECKOUT["/dat-phong/[token]\nCheckoutPage 3 bước\n(Long-poll BookingSessionLive)"]
+        CHECKIN["/checkin\nCheckinPage (>= 2 khóa)"]
     end
 
-    subgraph LandingBFF["🌐 every-inn-booking (Worker: saigonliving)"]
-        RL["IP Rate Limiter (CF-Connecting-IP)\n30 req/m search · 5 holds/10m · 5 lookups/15m"]
-        API_SEARCH["POST /api/guest/availability/search"]
-        API_HOLD["POST & PATCH /api/guest/holds/[id]"]
-        API_PAID["POST /api/guest/holds/[id]/notify-paid"]
-        API_POLL["GET /api/guest/holds/[id] (Adaptive 3-4s)"]
-        API_HOOK["POST /api/webhooks/banking"]
-        API_CHECKIN["POST /api/guest/checkin/lookup"]
+    subgraph BFF["🌐 every-inn-booking (saigonliving / BFF)"]
+        GUARD["guard(): Feature Flag +\nSame-Origin + Workers RL\n(SEARCH_RL / HOLD_RL / PAID_RL / LOOKUP_RL)"]
+        READ_API["GET /api/guest/storefront\nPOST /api/guest/availability"]
+        SES_API["POST /api/guest/sessions\nGET|PATCH|DELETE /sessions/[token]\nPOST /preview · POST /paid"]
+        LIVE_API["GET /sessions/[token]/live\nGET /api/guest/pulse"]
+        CI_API["POST /api/guest/checkin/lookup"]
     end
 
-    subgraph InternalCores["🔒 Internal Cloudflare Workers (workers_dev = false)"]
-        BC["everyinn-booking-core\n(BOOKING_DB: Pricing v2.0, Holds, Bookings)"]
-        CC["everyinn-cdp-core\n(CDP_DB: Tier Lookup & Stamp Reward)"]
-        AC["everyinn-agent-core\n(AGENT_DB: AES-GCM Vault & Telegram Ops)"]
+    subgraph AgentCore["🔐 everyinn-agent-core"]
+        LANDING_EP["LandingApi (/internal/v1/web/*)"]
+        ADMIN_EP["AdminApi (/internal/v1/sessions/*)"]
+        PAY_HOOK["POST /webhooks/payments/:provider\n(sepay | casso | payos)"]
+        DO_LIVE["DO: BookingSessionLive & InventoryPulse"]
+        ENGINE["Session Engine + CheckinAccess + AGENT_DB"]
     end
 
-    subgraph ExternalServices["📲 Quản lý & Thanh toán"]
-        TG["Telegram Bot\n(Quản lý nhận thông báo & duyệt 1-Tap)"]
-        BANK["VietQR / Banking Webhook\n(MB Bank 0906314109999)"]
+    subgraph Cores["🏨 Core Workers"]
+        BC["everyinn-booking-core\n(BOOKING_DB: Slots, Pricing v2, Calendar)"]
+        CC["everyinn-cdp-core\n(CDP_DB: Tier & customer_vouchers)"]
     end
 
-    GuestDevice --> RL
-    RL --> API_SEARCH
-    RL --> API_HOLD
-    RL --> API_PAID
-    RL --> API_POLL
-    RL --> API_CHECKIN
-    BANK -. "Auto Webhook (SePay/Casso)" .-> API_HOOK
+    subgraph StaffOps["👨‍💼 Quản trị & Vận hành"]
+        ADM["everyinn-admin\n(Wizard /sessions & OTA /calendar)"]
+        TG["Telegram Bot\n(Thẻ ss:/sm:, không in mã cửa)"]
+        BANK["Bank Webhook (SePay / Casso / PayOS)"]
+    end
 
-    API_SEARCH -- "Service Binding\nx-ei-caller: landing-bff" --> BC
-    API_HOLD -- "Service Binding" --> BC
-    API_HOLD -- "Tier & Stamp Reward" --> CC
-    API_POLL -- "Service Binding" --> BC
-    API_PAID -- "Notify & Create Escalation" --> AC
-    API_HOOK -- "Confirm Hold" --> BC
-    API_CHECKIN -- "Verify Booking (>=2 Keys)" --> BC
-    API_CHECKIN -- "Decrypt Door & Lockbox Codes" --> AC
-
-    AC <--> TG
-    AC -- "Confirm Payment Callback" --> BC
-    BC -- "CDP Sync Outbox" --> CC
+    Guest --> GUARD
+    GUARD --> READ_API & SES_API & LIVE_API & CI_API
+    READ_API -- "BOOKING_CORE (LANDING_READ)" --> BC
+    SES_API & LIVE_API & CI_API -- "AGENT_CORE (LandingApi)" --> LANDING_EP
+    ADM -- "AGENT_CORE (AdminApi)" --> ADMIN_EP
+    ADM -- "BOOKING_CORE (Calendar & Overrides)" --> BC
+    BANK -. "HTTPS Signed Webhook" .-> PAY_HOOK
+    LANDING_EP & ADMIN_EP & PAY_HOOK --> DO_LIVE --> ENGINE
+    ENGINE -- "Quote, Holds, Bookings, GuestLookup" --> BC
+    ENGINE -- "Loyalty, Vouchers lease/redeem" --> CC
+    ENGINE <--> TG
+    BC -- "Outbox Cron -> Accrual & Issue Vouchers" --> CC
 ```
 
-### 4.2. Luồng Đặt phòng, Thanh toán & Tự động Chuẩn bị Mã phòng (Sequence Diagram)
+### 4.2. Luồng Phone-First Hold, Thanh toán & Xác nhận (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Guest as 👤 Khách hàng (Mobile Web)
-    participant BFF as 🌐 every-inn-booking (Landing BFF)
-    participant BC as 🏨 everyinn-booking-core
-    participant CC as 💎 everyinn-cdp-core
-    participant AC as 🔐 everyinn-agent-core (Vault & TG)
+    actor Guest as 👤 Khách hàng
+    participant UI as 🌐 Landing (/dat-phong & /dat-phong/[token])
+    participant BFF as 🛡️ Landing BFF (/api/guest/*)
+    participant AC as 🔐 Agent Core (LandingApi + DO)
+    participant BC as 🏨 Booking Core
+    participant CC as 💎 CDP Core
     actor Owner as 👨‍💼 Quản lý (Telegram)
 
-    Guest->>BFF: Chọn loại hình (Giờ / Qua đêm 4 ca / Ngày) & Tìm phòng
-    BFF->>BC: POST /internal/v1/availability/search (applyPublicPromotions: true)
-    BC-->>BFF: Danh sách phòng trống + Public Promo + overnightAddons (60k/h)
-    BFF-->>Guest: Hiển thị thẻ phòng + Chip chọn thêm giờ (+60k/giờ)
+    Guest->>BFF: GET /storefront & POST /availability (criteria)
+    BFF->>BC: POST /availability/search (LANDING_READ, +overnightAddons)
+    BC-->>BFF: rooms[] + bookingWindow + shiftSummary[]
+    BFF-->>UI: Hiển thị phòng trống (phòng bận mờ "Vừa được đặt")
+    Note over UI,AC: UI mở long-poll GET /pulse?v= qua InventoryPulse DO
 
-    Guest->>BFF: Chọn chip thêm giờ (nếu có) & Bấm "Đặt phòng ngay"
-    BFF->>BC: POST /internal/v1/holds (ttlSeconds: 600, createdBy: "landing-guest")
-    BC-->>BFF: Hold (status="active", expiresAt = +10 phút)
-    BFF->>AC: POST /internal/v1/notify/booking-event (type="HOLD_CREATED")
-    AC->>Owner: ⏳ Telegram: "[GIỮ PHÒNG 10P] Phòng 202 - Qua đêm 22h-10h (+1h muộn)"
-    BFF-->>Guest: Chuyển tới /book/[holdId] (Đếm ngược 10:00)
-
-    Guest->>BFF: Nhập SĐT, Tên, MXH, Mã Promo (nếu có) -> Bấm "Tiếp tục thanh toán"
-    BFF->>CC: POST /internal/v1/customers/loyalty-context (Kiểm tra Hạng thẻ & Tem thưởng)
-    BFF->>BC: PATCH /internal/v1/holds/:id (Lưu draft khách, tính giá Core v2.0, sinh mã EIPAY...)
-    BC-->>BFF: Hold (status="awaiting_payment", paymentReference="EIPAY...", totalPrice)
-    BFF->>AC: POST /internal/v1/notify/booking-event (type="AWAITING_PAYMENT")
-    AC->>Owner: 💳 Telegram: "[CHỜ THANH TOÁN] Khách Nguyễn Văn A - Mã EIPAY..."
-    BFF-->>Guest: Hiển thị mã VietQR MB Bank + Nút "Tôi đã chuyển khoản"
-
-    Guest->>BFF: Chuyển khoản VietQR & Bấm "Tôi đã chuyển khoản"
-    BFF->>AC: POST /internal/v1/notify/payment-claimed (holdId, paymentReference, amount)
-    AC->>Owner: 🚨 Telegram: "[KHÁCH BÁO ĐÃ CK] Phòng 202 - 580.000đ"\nKèm nút: [✅ Đã nhận đủ] [❌ Chưa nhận]
-    
-    loop Adaptive Short-Polling (Mỗi 3-4s)
-        Guest->>BFF: GET /api/guest/holds/[id]
-        BFF->>BC: GET /internal/v1/holds/[id]
-        BC-->>BFF: status: "awaiting_payment"
-        BFF-->>Guest: Tiếp tục hiển thị màn hình chờ
+    Guest->>UI: Chọn phòng (+ add-on 60k/h) -> Bấm "Giữ phòng 10 phút"
+    UI->>Guest: Mở PhoneHoldModal nhập SĐT Việt Nam
+    Guest->>BFF: POST /api/guest/sessions (+phone, clientNonce, [forceSwitch])
+    BFF->>AC: POST /internal/v1/web/sessions
+    alt SĐT đang giữ phòng khác & !forceSwitch
+        AC-->>BFF: 409 ANOTHER_SESSION_LIVE (existingRoomLabel, remainingSeconds)
+        BFF-->>UI: Hiện lựa chọn "Đổi sang phòng X" (forceSwitch: true)
     end
+    AC->>BC: POST /internal/v1/holds (channel='web', sessionId, ttl=600s)
+    AC->>AC: Lưu booking_sessions (token_hash) + arm DO expiry alarm
+    AC-->>Owner: Telegram: Thẻ trạng thái [GIỮ PHÒNG]
+    AC-->>BFF: 201 { token, session } -> Redirect /dat-phong/<token>
 
-    Owner->>AC: Bấm nút [✅ Đã nhận đủ] trên Telegram (hoặc Webhook ngân hàng bắn về)
-    AC->>BC: POST /internal/v1/holds/:id/confirm (paymentMethod="bank_transfer")
-    BC-->>AC: Booking (id="BK-...", status="confirmed", payment_status="paid")
-    AC->>AC: Lấy/chuẩn bị mã cổng (<pass_cổng>#) & mã hộp khóa (<pass lock box>)
-    AC->>Owner: 🔐 Telegram: "[ĐÃ XÁC NHẬN & NHẮC CÀI PASS]\nPhòng 202 có khách hôm nay! Pass cổng: 1234# | Hộp khóa: 5678"
+    Guest->>BFF: Nhập form -> Debounce POST /sessions/[token]/preview
+    BFF->>AC: POST /internal/v1/web/sessions/:token/preview
+    AC->>BC: POST /quotes (tính giá Core v2.0) + CDP loyalty/vouchers
+    AC-->>BFF: { pricing, member, vouchers[] (codeMasked) }
 
-    Note over Guest,BFF: Lần poll tiếp theo (sau <= 3s)
-    Guest->>BFF: GET /api/guest/holds/[id]
-    BFF-->>Guest: status: "confirmed", bookingId: "BK-..." -> Tự động chuyển trang Thành công
-    BFF-->>Guest: Mở khóa nút sang Trang Hướng dẫn Check-in (/checkin)
+    Guest->>BFF: Bấm "Tiếp tục thanh toán" (PATCH /sessions/[token])
+    BFF->>AC: DO BookingSessionLive -> SAVE_GUEST
+    AC->>CC: POST /vouchers/reserve (lease theo hold)
+    AC->>BC: PATCH /holds/:holdId (sinh EIPAY..., đóng băng tổng tiền)
+    AC-->>Owner: Cập nhật thẻ TG tại chỗ [CHỜ THANH TOÁN]
+    AC-->>UI: status="awaiting_payment" + VietQR động từ properties.bank_*
+
+    Guest->>BFF: Chuyển khoản & bấm "Tôi đã chuyển khoản" (POST /paid)
+    BFF->>AC: DO BookingSessionLive -> CLAIM_PAID (+30p grace, <= checkinAt)
+    AC-->>Owner: Thẻ TG có nút ss:<sid>:ok / no / amt / rv
+    Note over UI,AC: Browser giữ kết nối long-poll GET /live?v= (25s, backoff 4s->30s)
+
+    alt Quản lý bấm ✅ (ss:<sid>:ok) hoặc Webhook Bank hợp lệ (autoConfirm)
+        AC->>BC: POST /holds/:id/confirm -> Booking confirmed (kèm channel, voucher)
+        BC-->>CC: Outbox -> redeem voucher + tích tem (có thể phát voucher mới)
+        AC->>AC: Kiểm tra/tạo mã cửa AES-GCM & nhắn Telegram "đã có mã ✓" (D9)
+        AC->>UI: DO notify -> Long-poll nhận status="confirmed" (< 1s) -> Nút sang /checkin
+    end
 ```
 
 ---
 
-## 5. Thuật toán Hiển thị Nút Thêm Giờ Qua Đêm (`overnightAddons`)
+## 5. Thuật Toán Nghiệp Vụ & Bảo Mật Cốt Lõi
 
-### 5.1. Ma trận Giới hạn Số Nút Theo Ca (`SHIFT_ADDON_CAPS`)
-Mọi ca qua đêm cộng thêm giờ nhận sớm / trả muộn đều nằm trong khung biên từ **21:00 tối hôm trước** đến **12:00 trưa hôm sau**, đơn giá cố định **`60.000đ/giờ`**:
-
-```typescript
-export const OVERNIGHT_SHIFT_CAPS = {
-  '21-9':  { baseStartHour: 21, baseEndHour: 9,  maxEarlyHours: 0, maxLateHours: 3 }, // Tối đa +1h, +2h, +3h checkout muộn (10h, 11h, 12h)
-  '22-10': { baseStartHour: 22, baseEndHour: 10, maxEarlyHours: 1, maxLateHours: 2 }, // Tối đa +1h checkin sớm (21h); +1h, +2h checkout muộn (11h, 12h)
-  '23-11': { baseStartHour: 23, baseEndHour: 11, maxEarlyHours: 2, maxLateHours: 1 }, // Tối đa +1h, +2h checkin sớm (22h, 21h); +1h checkout muộn (12h)
-  '24-12': { baseStartHour: 24, baseEndHour: 12, maxEarlyHours: 3, maxLateHours: 0 }, // Tối đa +1h, +2h, +3h checkin sớm (23h, 22h, 21h)
-} as const;
-
-export const OVERNIGHT_EXTRA_HOUR_FEE = 60_000; // VNĐ / giờ
-```
-
-### 5.2. Kiểm tra Lịch Trống Thực Tế trong 1 Truy Vấn D1 Duy Nhất
-Khi khách tìm phòng Qua đêm cho ngày $D$ với ca $S$:
-1. `everyinn-booking-core` mở rộng cửa sổ đọc `inventory_slots` ra toàn khung qua đêm mở rộng $[20:00 \text{ ngày } D, 13:00 \text{ ngày } D+1)$ (từ `21:00 - 60p turnover` đến `12:00 + 60p turnover`, chỉ 34 slot 30 phút cho mỗi phòng).
-2. Với mỗi phòng trống ca cơ bản $[T_{\text{in}}, T_{\text{out}})$:
-   - **Kiểm tra Nhận sớm (`+e giờ`, $1 \le e \le \text{maxEarlyHours}$)**: Toàn bộ slot trong $[T_{\text{in}} - e\text{h} - 60\text{p turnover}, T_{\text{in}})$ phải trống. Bị vướng ở bậc $e$ thì dừng kiểm tra các bậc lớn hơn.
-   - **Kiểm tra Trả muộn (`+l giờ`, $1 \le l \le \text{maxLateHours}$)**: Toàn bộ slot trong $[T_{\text{out}}, T_{\text{out}} + l\text{h} + 60\text{p turnover})$ phải trống. Bị vướng ở bậc $l$ thì dừng kiểm tra.
-3. Payload trả về đính kèm trong từng phòng:
-   ```json
-   "overnightAddons": {
-     "shift": "22-10",
-     "ruleMaxEarlyHours": 1,
-     "ruleMaxLateHours": 2,
-     "availableEarlyHours": [1],
-     "availableLateHours": [1, 2],
-     "surchargePerHour": 60000
-   }
-   ```
-4. Khi khách chọn chip trên UI, giá phòng tự động cộng thêm `(earlyHours + lateHours) * 60.000đ` và gửi thẳng vào `POST /api/guest/holds`.
-
-### 5.3. Bất Biến 60 Phút Dọn Phòng Hai Chiều (Bidirectional 60-Minute Turnover Invariant)
-Dù là tìm phòng giờ, ngày, ca qua đêm cơ bản hay chọn thêm giờ sớm/muộn, hệ thống luôn tuân thủ nguyên lý bảo vệ 2 chiều:
-
-1. **Chiều Ca Trước $\rightarrow$ Ca Sau**:
-   - Nếu ca trước kết thúc lúc $T_{\text{out}}^{(1)}$, hệ thống khóa làn turnover $[T_{\text{out}}^{(1)},\; T_{\text{out}}^{(1)} + 60']$.
-   - Ca sau chỉ được phép nhận phòng sớm nhất lúc:
-     $$T_{\text{in}}^{(2)} \ge T_{\text{out}}^{(1)} + 60\text{ phút}$$
-2. **Chiều Ca Sau $\leftarrow$ Ca Trước**:
-   - Nếu ca sau đã đặt nhận phòng lúc $T_{\text{in}}^{(2)}$, buồng phòng cần 60 phút dọn dẹp trước đó $[T_{\text{in}}^{(2)} - 60',\; T_{\text{in}}^{(2)}]$.
-   - Ca trước bắt buộc phải trả phòng muộn nhất lúc:
-     $$T_{\text{checkout}}^{(1)} \le T_{\text{in}}^{(2)} - 60\text{ phút}$$
-3. **Hai ca liên tiếp luôn đảm bảo cách nhau tối thiểu 60 phút**:
-   $$\Delta T = T_{\text{in}}^{(2)} - T_{\text{out}}^{(1)} \ge 60\text{ phút}$$
-   Nhờ kiến trúc 2 lanes (`occupancy` và `turnover`) trong bảng `inventory_slots`, câu truy vấn kiểm tra của Core tự động phát hiện xung đột cả 2 chiều trong đúng 1 lệnh `SELECT` duy nhất.
+1. **Bước giờ nhận phòng theo giờ & Lead-Time**:
+   - `hourlyStarts()` (`shared/booking-kit/stay.ts`) tạo danh sách giờ bước **60 phút (`:00`)** từ `firstCheckin` (`08:00`) đến `lastCheckin` (`21:00`), lọc `t >= nowMs + minLeadMinutes * 60_000` (mặc định 30 phút).
+   - BFF `criteria.ts` kiểm tra regex `:00`; Core `stayRules.ts` kiểm tra `HOURLY_CHECKIN_STEP_INVALID` (`422`) và `LEAD_TIME_TOO_SHORT` (`422`).
+2. **Overnight Add-ons & Bất biến 60p Dọn phòng 2 Chiều**:
+   - Đọc 1 lần `inventory_slots` qua `slotsInWindow` trên toàn cửa sổ `[window_start, window_end + 60']` (mặc định `20:00`/`21:00` → `13:00` hôm sau).
+   - `computeOvernightAddons` xét 2 làn `occupancy` và `turnover` cùng ngưỡng `nowMs`, đảm bảo liên tiếp (`IN_THE_PAST`, `SLOT_OCCUPIED`, `TURNOVER_BUFFER_CONFLICT`).
+3. **Rolling Advance Window (`booking_rules.max_advance_days`)**:
+   - Tính bằng **ngày dương lịch VN** qua `addBusinessDays(todayVn, max_advance_days)`. Ca qua đêm `24-12` bắt đầu `00:00` hôm sau tính `nightDate` là đêm trước (`overnightNightDate`). Chặn `422 ADVANCE_BOOKING_EXCEEDED` cho `landing-bff`/`agent-core`, còn `admin` nhận `warnings[]`.
+4. **Rate Limiting 2 Lớp & Reconciler Fallback**:
+   - Workers RL bảo vệ burst ngắn 60s ở edge; `AGENT_DB` giữ hạn mức dài hơn (1 live hold / `phone_hash`, 2 live holds / `ip_hash` web, 5 sai `/checkin` / 15p / `ipHash`).
+   - Cron 5 phút / reconciler trên `everyinn-agent-core` xử lý hold hết hạn dự phòng khi DO alarm trễ, replay phiên kẹt ở `confirming > 60s` (`RESUME`), và kiểm tra nhắc cài mã cửa trước `checkinAt - codesVisibleHoursBefore`.
 
 ---
 
-## 6. Cơ Chế Tính Giá & Chính Sách Ưu Đãi Multi-Tier (Core v2.0)
+## 6. Cấu trúc File Đã Triển Khai (Verified File Map)
 
-Frontend ủy quyền toàn bộ phép tính giá cho Backend Core theo công thức:
-$$T_{\text{total}} = \max\Big(0,\; P_{\text{base}} - D_{\text{promo}} - D_{\text{loyalty}}\Big) + S_{\text{holiday}} + S_{\text{extra\_hours}} + S_{\text{extra\_guests}}$$
+### 6.1. `everyinn-platform-docs`
+- `shared/booking-kit/{format.ts,live.ts,stay.ts,types.ts}` — Source of Truth DTOs, stay helpers, long-poll hook (`useLongPoll`, `useServerCountdown`)
+- `scripts/{sync-booking-kit.mjs,sync-contracts.mjs,uat-lsb-smoke.mjs,check-workers.mjs,check-workflows.mjs}`
+- `CONVENTIONS.md`, `AGENT_INDEX.md`, `EI_LANDING_SELF_BOOKING_SPEC.md`, `EI_PHASE1_STATUS.md`, `EI_PROD_RELEASE_CHECKLIST.md`
 
-### 6.1. Chi Tiết Các Cấu Phần
-- **$P_{\text{base}}$ (Base Price)**:
-  - Haven: Combo 3h = `320.000đ`, Qua đêm = `520.000đ`, Theo ngày = `620.000đ/đêm`.
-  - Signature: Combo 3h = `360.000đ`, Qua đêm = `620.000đ`, Theo ngày = `750.000đ/đêm`.
-- **$D_{\text{promo}}$ (Chiến dịch Khuyến mãi)**:
-  - **Public Promo (`is_public = 1`)**: Tự động tìm và áp dụng mức giảm tốt nhất trong kết quả tìm phòng mà không cần nhập mã.
-  - **Private Promo Code (`is_public = 0`)**: Khách nhập mã code trên form thanh toán để áp dụng.
-  - **Bắt buộc**: $D_{\text{promo}}$ chỉ được tính trên $P_{\text{base}}$ (hoặc $P_{\text{base}}$ các đêm đủ điều kiện), không giảm trên phụ thu.
-- **$D_{\text{loyalty}}$ (Hội viên & Tích tem CDP)**:
-  - Tra cứu theo SĐT: Xác định hạng thẻ (`bronze`, `silver`, `gold`) và phần thưởng tích tem (`rewardValue: 50k, 100k, 150k`).
-  - Áp dụng trên phần giá cơ bản còn lại: $D_{\text{loyalty}} \le P_{\text{base}} - D_{\text{promo}}$.
-- **$S_{\text{holiday}}$**: Phụ thu ngày lễ theo đêm/ca từ `surcharge_rules`.
-- **$S_{\text{extra\_hours}}$**: `(earlyHours + lateHours + extraComboHours) * 60.000đ`.
-- **$S_{\text{extra\_guests}}$**: `(numGuests - 2) * 150.000đ * stayUnits` (Chỉ áp dụng Signature 3-4 khách).
+### 6.2. `everyinn-booking-core`
+- `migrations/`:
+  - `0010_booking_sessions_channel.sql` (`channel`, `session_id`, `voucher_code`, `voucher_value`, `caller`, `external_ref`, `overnight_shifts`)
+  - `0011_calendar_rates.sql` (`rate_overrides`, `room_blocks.block_type`)
+- `src/`:
+  - `domain/{pricing.ts,stayRules.ts,time.ts,promotions.ts}`
+  - `handlers/{availability.ts,storefront.ts,holds.ts,calendar.ts,catalog.ts,blocks.ts,views.ts}`
+  - `repo/{master.ts,slots.ts,bookings.ts,blocks.ts,audit.ts,financial.ts,outbox.ts}`
+  - `services/{quote.ts,cdp.ts,loyalty-sync.ts}`, `lib/context.ts` (`landing-bff` caller), `routes.ts` (`LANDING_READ`)
+- `test/`: `test/{bookings.spec.ts,calendar.spec.ts,callers.spec.ts,domain.spec.ts,lsb.spec.ts}`
 
----
+### 6.3. `everyinn-cdp-core`
+- `migrations/`: `0004_customer_vouchers.sql`
+- `src/`: `domain/{rules.ts,stamps.ts}`, `handlers/{vouchers.ts,customers.ts,accrual.ts,outcomes.ts}`, `routes.ts`
+- `test/`: `test/vouchers.spec.ts`
 
-## 7. Giải Pháp Near-Realtime, Security & Rate Limiting
+### 6.4. `everyinn-agent-core`
+- `migrations/`: `0021_booking_sessions.sql`
+- `src/`:
+  - `index.ts` (expose `LandingApi`, `AdminApi`, `BookingSessionLive`, `InventoryPulse`, `POST /webhooks/payments/:provider`)
+  - `cron.ts` (gọi `reconcileSessions`)
+  - `masterdata/{defaults.ts,registry.ts}` (`SEED_VERSION = 11`: `booking_channels`, `checkin_guide`, `payment_policy`)
+  - `sessions/{checkinAccess.ts,core.ts,http.ts,live.ts,machine.ts,notify.ts,payments.ts,policy.ts,reconcile.ts,repo.ts,service.ts,telegram.ts}`
+  - `webhooks/telegram.ts` (định tuyến `ss:`/`sm:` & force-reply số tiền)
+- `test/`: `test/{sessions.spec.ts,contract.spec.ts,masterdata.spec.ts,domain.spec.ts,entrypoints.spec.ts}`
 
-### 7.1. Phân Tích Tải & Tính Khả Thi Near-Realtime
-- **Traffic thực tế**:
-  - ~20 khách hỏi/ngày $\rightarrow$ ~120 bookings/tháng $\approx$ 4 bookings/ngày.
-  - Tìm phòng: 50 – 150 lượt/ngày.
-  - Polling khi thanh toán: Khách chờ duyệt trung bình 30s – 120s $\rightarrow$ Polling 3s/lần tốn ~10 – 40 requests/đơn. Với 4 đơn/ngày, tổng lượng request polling chỉ ~160 – 600 req/ngày.
-- **Cloudflare Free Tier Quota**: Cung cấp **100.000 requests/ngày**. Tổng tải của Every Inn chỉ chiếm **~1.5% – 3% quota**, hoàn toàn dư địa để chạy near-realtime short-polling mượt mà mà không lo nghẽn hoặc vượt chi phí.
+### 6.5. `every-inn-booking` (Public Landing & BFF)
+- `wrangler.jsonc` (`BOOKING_CORE`, `CDP_CORE`, `AGENT_CORE` `LandingApi`, `SEARCH_RL`, `HOLD_RL`, `PAID_RL`, `LOOKUP_RL`, `WEB_BOOKING_ENABLED`)
+- `src/app/`:
+  - `dat-phong/page.tsx`, `dat-phong/[token]/page.tsx`, `checkin/page.tsx`, `page.tsx`, `booking.css`
+  - `api/guest/storefront/route.ts`, `api/guest/availability/route.ts`, `api/guest/pulse/route.ts`
+  - `api/guest/sessions/route.ts`, `api/guest/sessions/[token]/route.ts`
+  - `api/guest/sessions/[token]/{live,preview,paid}/route.ts`
+  - `api/guest/checkin/lookup/route.ts`
+- `src/components/`:
+  - `booking/{HomeBooking.tsx,SearchBar.tsx,SearchPage.tsx,RoomResultCard.tsx,PhoneHoldModal.tsx,CheckoutPage.tsx,Disabled.tsx}`
+  - `checkin/CheckinPage.tsx`, `Header.tsx`, `Footer.tsx`
+- `src/lib/`: `booking/client.ts`, `server/{bff.ts,criteria.ts,storefront.ts,devMock.ts}`
+- `src/shared/booking-kit/{format.ts,live.ts,stay.ts,types.ts}`
+- `test/`: `test/{guestBooking.test.mjs,perfectCases.test.mjs,contract.test.mjs}`
 
-### 7.2. Edge Rate Limiter (`rateLimit.ts`)
-Áp dụng Sliding Window In-Memory / KV Rate Limiter tại lớp BFF:
-```typescript
-// Các hạn mức bảo vệ căn bản theo IP (CF-Connecting-IP)
-export const RATE_LIMITS = {
-  SEARCH:      { limit: 30, windowSec: 60 },  // 30 req / phút / IP
-  CREATE_HOLD: { limit: 5,  windowSec: 600 }, // 5 holds / 10 phút / IP (chống chiếm phòng ảo)
-  NOTIFY_PAID: { limit: 5,  windowSec: 60 },  // 5 req / phút / hold
-  CHECKIN:     { limit: 5,  windowSec: 900 }, // 5 lần thử sai / 15 phút / IP (chống dò mã)
-};
-```
-Nếu vượt quá hạn mức, trả về ngay HTTP `429 Too Many Requests` kèm header `Retry-After`.
-
----
-
-## 8. Kế Hoạch File Changes & Refactoring
-
-### 8.1. `everyinn-booking-core` (Internal Booking Worker)
-```text
-everyinn-booking-core/
-├── migrations/
-│   └── 0005_calendar_rate_overrides.sql   # [NEW] DDL bảng calendar_rate_overrides & index
-├── src/
-│   ├── lib/
-│   │   └── context.ts                     # Bổ sung caller 'landing-bff' vào KNOWN_CALLERS
-│   ├── domain/
-│   │   ├── overnightAddons.ts             # Logic tính nút +1h/2h/3h sớm/muộn 4 ca theo giá 60.000đ/giờ
-│   │   ├── pricing.ts                     # Tích hợp calendar_rate_overrides vào Core Pricing v2.0
-│   │   └── bookingRules.ts                # [NEW] Kiểm tra Rolling Advance Booking Window (max_advance_days)
-│   ├── handlers/
-│   │   ├── availability.ts                # Mở rộng trả về overnightAddons trong POST /availability/search
-│   │   ├── guestBookingLookup.ts          # POST /internal/v1/bookings/guest-lookup (xác thực >= 2 keys)
-│   │   ├── calendar.ts                    # [NEW] GET /internal/v1/calendar/matrix (Ma trận phòng/ngày)
-│   │   └── rateOverrides.ts               # [NEW] POST & DELETE /internal/v1/calendar/rate-overrides
-│   └── routes.ts                          # Đăng ký routes nội bộ mới
-```
-
-### 8.2. `everyinn-agent-core` (Door-Code Vault & Telegram Bot Worker)
-```text
-everyinn-agent-core/
-├── src/
-│   ├── handlers/
-│   │   ├── landingNotifications.ts        # Gửi thông báo Telegram mọi trạng thái kèm Inline Buttons
-│   │   └── guestCheckinAccess.ts          # Chuẩn bị trước pass cổng/hộp khóa, nhắc Quản lý cài pass
-│   ├── flows/
-│   │   └── confirm.ts                     # Xử lý Telegram callback lpcf:<holdId> -> Gọi Core confirmHold
-│   └── index.ts                           # Expose routes nội bộ qua Service Binding cho landing-bff
-```
-
-### 8.3. `every-inn-booking` (Public Landing Page & Guest BFF)
-```text
-every-inn-booking/
-├── wrangler.jsonc                         # Bổ sung Service Bindings: BOOKING_CORE, CDP_CORE, AGENT_CORE
-├── public/
-│   └── checkin-guide/                     # Media hướng dẫn checkin/checkout + video đường đi đầu hẻm
-├── src/
-│   ├── lib/
-│   │   ├── server/
-│   │   │   ├── coreClients.ts             # Typed Service Binding clients (x-ei-caller: landing-bff)
-│   │   │   ├── rateLimit.ts               # IP-based sliding window rate limiter (CF-Connecting-IP)
-│   │   │   └── telegramNotify.ts          # Gửi sự kiện sang AGENT_CORE
-│   │   └── booking/
-│   │       ├── overnightRules.ts          # Cấu hình 4 ca qua đêm & đơn giá 60k/giờ
-│   │       ├── advanceBookingRules.ts     # [NEW] Giới hạn ngày chọn trên DatePicker theo max_advance_days
-│   │       └── checkinTemplate.ts         # Template 4 phần chuẩn & hàm thay thế biến an toàn
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── guest/
-│   │   │   │   ├── availability/search/route.ts       # Tìm phòng + Giá KM + Overnight Add-ons (kiểm tra max_advance_days)
-│   │   │   │   ├── promotions/validate/route.ts       # Kiểm tra mã giảm giá + Hạng thẻ CDP
-│   │   │   │   ├── holds/route.ts                     # Tạo giữ phòng 10 phút (chặn ngày ngoài advance window)
-│   │   │   │   ├── holds/[id]/route.ts                # Lấy trạng thái Hold (phục vụ Polling 3-4s)
-│   │   │   │   ├── holds/[id]/notify-paid/route.ts    # Báo đã chuyển khoản -> Telegram Quản lý
-│   │   │   │   └── checkin/lookup/route.ts            # Tra cứu hướng dẫn check-in (>= 2 keys)
-│   │   │   └── webhooks/
-│   │   │       └── banking/route.ts                   # Webhook SePay/Casso/PayOS
-│   │   ├── book/[holdId]/page.tsx                     # Trang Checkout + Đếm ngược 10p + VietQR + Near-realtime Polling
-│   │   └── checkin/page.tsx                           # Trang Landing Page Hướng dẫn Check-in (4 phần cố định)
-│   └── components/
-│       ├── booking/
-│       │   ├── AgodaSearchBar.tsx                     # Search widget 3 tab (Vô hiệu hóa ngày vượt max_advance_days)
-│       │   ├── AvailableRoomGrid.tsx                  # Lưới phòng trống
-│       │   ├── InteractiveRoomCard.tsx                # Thẻ phòng có Carousel + Nút thêm giờ (+60k/h)
-│       │   ├── HoldCountdownBanner.tsx                # Thanh đếm ngược 10:00
-│       │   ├── GuestCheckoutForm.tsx                  # Form thông tin + Tự nhận diện CDP + Mã KM
-│       │   └── VietQRPaymentPanel.tsx                 # Mã VietQR MB Bank + Live Polling 3-4s
-│       └── checkin/
-│           ├── CheckinLookupForm.tsx                  # Form nhập >= 2 khóa xác thực
-│           └── CheckinGuideView.tsx                   # Giao diện 4 phần chuẩn + One-Tap Copy
-```
-
-### 8.4. `everyinn-admin` (Quản Trị Lịch Phòng & Giá Bán OTA Extranet)
-```text
-everyinn-admin/
-├── src/
-│   ├── app/
-│   │   └── calendar/
-│   │       └── page.tsx                       # [NEW] Ma trận Lịch phòng kiểu OTA (ngày x phòng)
-│   └── components/
-│       └── calendar/
-│           ├── CalendarMatrixView.tsx         # [NEW] Lưới ô hiển thị Giá bán, Tình trạng (Mở/Đóng/Kẹt), Override
-│           ├── StopSellActionModal.tsx        # [NEW] Modal Đóng/Mở bán nhanh cho 1 ngày hoặc dải ngày/giờ
-│           ├── DynamicRateOverrideDrawer.tsx  # [NEW] Drawer chỉnh sửa giá bán trực tiếp theo ngày/ca
-│           └── RollingAdvanceWindowConfig.tsx # [NEW] Cấu hình số tháng/ngày nhận trước tối đa (2m, 3m, 6m, 1y)
-```
-
----
-
-## 9. Quản Trị Lịch Phòng & Giá Bán Kiểu OTA (Calendar Extranet)
-
-Hệ thống bổ sung năng lực quản trị tương tự Extranet của các sàn OTA (Agoda YCS / Booking.com Pulse / Airbnb Host Calendar) trực tiếp trên nền Cloudflare Workers và D1:
-
-### 9.1. Đóng / Mở Bán Chủ Động (Stop-Sell & Room Blocks)
-- **Cơ chế**: Admin có thể đóng bán tức thời cho 1 phòng cụ thể hoặc toàn bộ cơ sở trong 1 ngày, nhiều ngày hoặc khung giờ nhất định thông qua bảng `room_blocks`.
-- **Lý do chuẩn hóa**: `'stop_sell'` (chủ động đóng bán OTA/Direct), `'maintenance'` (bảo trì thiết bị), `'owner_stay'` (chủ nhà ở), `'deep_cleaning'` (tổng vệ sinh định kỳ).
-- **Tính toán khả dụng**: Khi có block hiệu lực trên phòng $R$ tại khoảng thời gian $[T_1, T_2]$, `everyinn-booking-core` tự động coi toàn bộ slot trong khoảng này (và buffer 60 phút trước/sau) là không khả dụng (`available = false`), ngăn khách đặt trên Landing Page.
-
-### 9.2. Điều Chỉnh Giá Trực Tiếp Trên Calendar (`calendar_rate_overrides`)
-- **Bảng D1 mới**: `calendar_rate_overrides` lưu trữ giá bán tùy chỉnh ghi đè theo `(property_id, room_class / room_id, rate_plan_code, override_date)`.
-- **Tích hợp Core Pricing v2.0**:
-  1. Khi tính giá cho một ngày lưu trú, hệ thống kiểm tra bảng `calendar_rate_overrides` trước.
-  2. Nếu tồn tại bản ghi override hợp lệ (`is_active = 1`), giá trị `custom_base_price` sẽ **thay thế trực tiếp** cho $P_{\text{base}}$ niêm yết trong bảng `rate_rules`.
-  3. Tất cả các chính sách giảm giá (Public Promotion, Private Promo Code, Chiết khấu Hạng thẻ CDP, Quà tặng tích tem) sẽ được tính toán dựa trên mức $P_{\text{base}}$ đã ghi đè này:
-     $$T_{\text{total}} = \max\Big(0,\; P_{\text{base}}^{(\text{overridden})} - D_{\text{promo}} - D_{\text{loyalty}}\Big) + S_{\text{holiday}} + S_{\text{extra\_hours}} + S_{\text{extra\_guests}}$$
-  4. Đơn giá thêm giờ `$60.000đ/giờ$` và phụ thu khách thứ 3 Signature `$150.000đ/khách$` vẫn giữ nguyên độc lập.
-
-### 9.3. Cửa Sổ Nhận Đặt Phòng Trước Luân Phiên (Rolling Advance Booking Window)
-- **Yêu cầu nghiệp vụ**: Cho phép home nhận đặt trước tối đa trong một khoảng thời gian xác định (ví dụ: **2 tháng, 3 tháng [mặc định], 6 tháng, hoặc 1 năm**) và **tự động tịnh tiến (roll forward)** liên tục theo từng ngày mà không cần admin thao tác thủ công.
-- **Tham số cấu hình**: Lưu trong `booking_configs.max_advance_days` (mặc định: `90` ngày tương đương 3 tháng; các mốc nhanh: 60 ngày, 90 ngày, 180 ngày, 365 ngày).
-- **Thuật toán Luân phiên Ngày (Rolling Day Invariant)**:
-  - Lấy ngày hiện tại tại múi giờ Việt Nam (`Asia/Ho_Chi_Minh`): $D_{\text{today}}$.
-  - Mốc ngày xa nhất được phép đặt phòng:
-    $$D_{\text{max\_allowed}} = \text{addDays}(D_{\text{today}},\; \text{max\_advance\_days})$$
-  - Vào lúc `00:00:00` mỗi ngày (giờ VN), $D_{\text{today}}$ tăng thêm 1 ngày $\rightarrow D_{\text{max\_allowed}}$ tự động tịnh tiến thêm 1 ngày theo thời gian thực (Zero-cron, Zero-maintenance).
-- **Kiểm soát 2 Lớp (Two-Layer Enforcement)**:
-  1. **Lớp Giao diện (Landing Page DatePicker)**: Vô hiệu hóa (disable) tất cả các ngày $> D_{\text{max\_allowed}}$ trên lịch tìm kiếm phòng. Khách không thể nhấp chọn ngày vượt quá cửa sổ.
-  2. **Lớp Server-Authoritative (`BOOKING_CORE`)**: Khi nhận request tìm phòng hoặc tạo Hold với `checkinDate > D_{\text{max\_allowed}}`, Core từ chối ngay với mã lỗi chuẩn `422 ADVANCE_BOOKING_EXCEEDED` kèm thông báo tiếng Việt: *"Hệ thống hiện chỉ mở nhận đặt phòng trước tối đa ${max_advance_days} ngày. Vui lòng chọn ngày trong khoảng cho phép."*
-```
+### 6.6. `everyinn-admin` (Unified Engine & OTA Calendar Extranet)
+- `wrangler.jsonc` (`AGENT_CORE` `AdminApi`, `BOOKING_CORE`, `CDP_CORE`)
+- `src/app/calendar/page.tsx`, `src/app/dashboard/page.tsx`
+- `src/app/api/`:
+  - `calendar/matrix/route.ts`, `rate-overrides/{route.ts,clear/route.ts}`, `room-blocks/bulk/route.ts`, `configs/booking-window/route.ts`
+  - `sessions/{route.ts,[id]/route.ts,[id]/[action]/route.ts,[id]/live/route.ts,by-hold/[holdId]/route.ts}`
+- `src/components/`:
+  - `bookings/checkout/{SessionPaymentPanel.tsx,sessionLabels.ts}`, `BookingWizard.tsx`
+  - `calendar/{BookingWindowCard.tsx,RateOverrideDrawer.tsx,StopSellModal.tsx,types.ts}`
+  - `dashboard/{HoldSessionDrawer.tsx,GanttHoldBar.tsx,GanttChart.tsx,BookingDetailDrawer.tsx}`
+- `src/lib/{calendar.ts,sessions.ts,cores.ts,coreMappers.ts}`, `src/shared/booking-kit/*`
+- `test/`: `test/{calendar.test.mjs,sessions.test.mjs,contract.test.mjs}`
