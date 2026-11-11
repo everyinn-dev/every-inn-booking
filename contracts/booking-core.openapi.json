@@ -397,12 +397,13 @@
           "lifecycle": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["confirmedAt", "cancelledAt", "cancelledBy", "cancelReason", "noShowAt", "noShowBy", "noShowReason"],
+            "required": ["confirmedAt", "cancelledAt", "cancelledBy", "cancelReason", "closureReasonCode", "noShowAt", "noShowBy", "noShowReason"],
             "properties": {
               "confirmedAt": { "$ref": "#/components/schemas/NullableInstant" },
               "cancelledAt": { "$ref": "#/components/schemas/NullableInstant" },
               "cancelledBy": { "$ref": "#/components/schemas/StaffRef" },
               "cancelReason": { "$ref": "#/components/schemas/NullableString" },
+              "closureReasonCode": { "enum": ["guest_cancel", "no_show", "property_cancel", "staff_error", "other", null] },
               "noShowAt": { "$ref": "#/components/schemas/NullableInstant" },
               "noShowBy": { "$ref": "#/components/schemas/StaffRef" },
               "noShowReason": { "$ref": "#/components/schemas/NullableString" }
@@ -1779,7 +1780,7 @@
         "summary": "Legacy filters + paging (pageSize ≤ 50), deterministic order, ETag on the bookings domain version.",
         "parameters": [
           { "name": "roomId", "in": "query", "schema": { "type": "string" } },
-          { "name": "status", "in": "query", "schema": { "enum": ["all", "pending", "confirmed", "cancelled", "no_show"] } },
+          { "name": "status", "in": "query", "description": "live = pending + confirmed; closed = cancelled + no_show", "schema": { "enum": ["all", "live", "closed", "pending", "confirmed", "cancelled", "no_show"] } },
           { "name": "depositStatus", "in": "query", "schema": { "enum": ["all", "none", "deposit_paid", "fully_paid"] } },
           { "name": "bookingType", "in": "query", "schema": { "type": "string" } },
           { "name": "loyaltySyncStatus", "in": "query", "schema": { "type": "string" } },
@@ -2121,9 +2122,25 @@
         "operationId": "cancelBooking",
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
-        "summary": "Soft cancel (replaces legacy hard delete): frees inventory, records CDP outcome for counted bookings (no loyalty reversal in mock-v1).",
+        "summary": "Soft cancel (replaces legacy hard delete) before checkout: frees inventory, optional refund ≤ net received (ledger entry in the same transaction), records CDP outcome for counted bookings (no loyalty reversal in mock-v1). reasonCode 'no_show' is rejected (use /no-show); 'other' requires a reason.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" }, "reason": { "type": "string" } } } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["expectedVersion"],
+                "properties": {
+                  "expectedVersion": { "type": "integer" },
+                  "reasonCode": { "enum": ["guest_cancel", "property_cancel", "staff_error", "other"] },
+                  "reason": { "type": "string" },
+                  "refund": { "type": "object", "required": ["amount", "method"], "properties": { "amount": { "type": "integer" }, "method": { "$ref": "#/components/schemas/PaymentMethod" }, "reference": { "type": "string" } } }
+                }
+              }
+            }
+          }
+        },
         "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
       }
     },
@@ -2278,7 +2295,7 @@
       "get": {
         "operationId": "revenueMatrix",
         "x-callers": ["admin-bff"],
-        "summary": "Room x month revenue pivot (manager role enforced server-side, 403 FORBIDDEN_ROLE otherwise). Revenue = SUM(total_price) of confirmed bookings grouped by the Asia/Ho_Chi_Minh month of checkin_at. Defaults to the current month + 3 preceding; max 24 months.",
+        "summary": "Room x month revenue pivot (manager role enforced server-side, 403 FORBIDDEN_ROLE otherwise). Revenue = SUM(total_price) of confirmed bookings grouped by the Asia/Ho_Chi_Minh month of checkin_at. retained = SUM(paid_amount - refund_amount) of cancelled / no_show bookings (money kept after closing), same month basis. Defaults to the current month + 3 preceding; max 24 months.",
         "parameters": [
           { "name": "from", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } },
           { "name": "to", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } }
@@ -2291,7 +2308,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["from", "to", "months", "basis", "status", "rooms", "columnTotals", "grandTotal", "bookingCount"],
+                  "required": ["from", "to", "months", "basis", "status", "rooms", "columnTotals", "grandTotal", "bookingCount", "retained"],
                   "properties": {
                     "from": { "type": "string" },
                     "to": { "type": "string" },
@@ -2316,7 +2333,17 @@
                     },
                     "columnTotals": { "type": "array", "items": { "type": "integer" } },
                     "grandTotal": { "type": "integer" },
-                    "bookingCount": { "type": "integer" }
+                    "bookingCount": { "type": "integer" },
+                    "retained": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["columnTotals", "grandTotal", "bookingCount"],
+                      "properties": {
+                        "columnTotals": { "type": "array", "items": { "type": "integer" } },
+                        "grandTotal": { "type": "integer" },
+                        "bookingCount": { "type": "integer" }
+                      }
+                    }
                   }
                 }
               }

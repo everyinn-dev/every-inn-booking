@@ -21,6 +21,17 @@ Mọi khách hàng khi đặt phòng tại Every Inn đều cam kết tuân th�
    - **Miễn phí đổi lịch 01 lần** nếu khách thông báo trước giờ check-in ít nhất **24 tiếng**.
    - Thời gian dời lịch không vượt quá **14 ngày**. Dời nhiều hơn 7 ngày phụ thu **30%** giá trị phòng.
    - **KHÔNG hỗ trợ đổi lịch vào dịp Lễ, Tết và không dời qua tháng tiếp theo**.
+   - **Vận hành nội bộ (Admin, từ 2026-11-11):** mọi lần huỷ đều chọn một lý do và quyết định hoàn tiền trong cùng một bước; không còn "xoá" đơn.
+
+     | Lý do | Trạng thái | Hoàn tiền mặc định |
+     |---|---|---|
+     | Khách chủ động huỷ | Đã huỷ | Không hoàn (giữ cọc) |
+     | Khách không đến (No-show) | No-show | Không hoàn |
+     | Khách sạn huỷ (sự cố phòng / overbook) | Đã huỷ | Hoàn toàn bộ |
+     | Tạo nhầm / trùng đơn | Đã huỷ | Hoàn toàn bộ |
+     | Lý do khác (bắt buộc ghi rõ) | Đã huỷ | Không hoàn |
+
+     Số hoàn tối đa = số khách đã trả. Sau giờ trả phòng không huỷ / No-show được nữa. Điểm thành viên chưa bị trừ khi huỷ (giai đoạn sau).
 
 4. **Bảo vệ cơ sở vật chất & Nghiêm cấm xâm phạm quyền riêng tư**:
    - **KHÔNG tự ý trang trí phòng bằng băng dính 2 mặt, keo xốp dán tường** làm tróc lớp sơn (nếu vi phạm sẽ phải đền bù chi phí sơn bả lại mảng tường).
