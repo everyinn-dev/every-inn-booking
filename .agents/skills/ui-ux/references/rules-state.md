@@ -63,7 +63,7 @@ rời nhóm rồi xin mời lại được, cả ba vẫn đỏ.
 | Thu hồi khoá API, thu hồi lời mời | Có | 2 |
 | Đăng xuất, đăng xuất thiết bị khác, đăng xuất hàng loạt | Có | 3 (chủ dự án chốt) |
 | Rời nhóm, gỡ thành viên | Có | 3 |
-| Xoá ảnh đại diện (có Hoàn tác trong toast) | Không, nút viền trung tính | Không câu nào: ảnh cũ quay lại ngay khi bấm Hoàn tác (`app.md`, "Trang hồ sơ cá nhân") |
+| Xoá ảnh đại diện (có Hoàn tác trong toast) | Không, nút viền trung tính | Không câu nào: ảnh cũ quay lại ngay khi bấm Hoàn tác (`layouts/app/profile.md`, "Trang hồ sơ cá nhân") |
 | Gửi lại lời mời hàng loạt, gửi email cho 240 khách | Không | Không câu nào. Vẫn hỏi lại vì đụng nhiều thứ một lúc, dùng hộp trung tính (`overlay.md`) |
 
 Gặp việc chưa có trong bảng thì trả lời ba câu, ghi thêm một dòng vào bảng, và ghi mã
@@ -396,7 +396,7 @@ ngang, lộ khoảng một nửa**. macOS, iOS, Android mặc định ẩn thanh
 yên, và người dùng hay bỏ sót cả thanh cuộn đang hiện; nội dung bị cắt ngang thì mắt
 muốn cuộn tiếp để xem nốt:
 
-- **Chọn `max-h` sao cho mép dưới cắt giữa một mục, không cắt sát ranh giới hai mục.** Cắt còn thiếu vài px thì trông như danh sách hết ở đó (mục cuối lộ gần trọn thì không ai biết còn mục bên dưới). Công thức cho khung `p-1`, mục `h-10`: `max-h` = 40 × số mục trọn + 4 + 20 → **`max-h-76`** (304px, lộ 7 mục rưỡi) cho select, dropdown dài. Danh sách có nhãn nhóm thì đo ở trạng thái mặc định rồi xê `max-h` từng bậc 4px tới khi mục cuối lộ giữa 1/3 và 2/3.
+- **Chọn `max-h` sao cho mép dưới cắt giữa một mục, không cắt sát ranh giới hai mục.** Cắt còn thiếu vài px thì trông như danh sách hết ở đó (mục cuối lộ gần trọn thì không ai biết còn mục bên dưới). Công thức cho khung `p-1`, mục `min-h-10` cách nhau `gap-1`: `max-h` = 44 × số mục trọn + 4 + 20 → **`max-h-83`** (332px, lộ 7 mục rưỡi) cho select, dropdown dài. Danh sách có nhãn nhóm thì đo ở trạng thái mặc định rồi xê `max-h` từng bậc 4px tới khi mục cuối lộ giữa 1/3 và 2/3.
 - **Mục cao thấp khác nhau** (thông báo, bình luận, kết quả tìm có mô tả) thì không chốt được một con số `max-h`. Tính bằng JS lúc mở: trong giới hạn cao tối đa, tìm mục thấp nhất mà **điểm giữa** của nó còn lọt, rồi hạ chiều cao danh sách xuống đúng điểm giữa đó. Dữ liệu dài ngắn hay màn cao thấp thế nào cũng cắt giữa một mục:
 
 ```ts
@@ -611,7 +611,7 @@ tiết" trong dòng, khối bước công cụ trong chat. Cùng lý do, **khôn
 kiện** (`{isOpen && …}`) hay `hidden` cho phần nội dung đó: cũng giật y như vậy.
 
 Mẫu đầy đủ cho accordion (padding, hover, khung, cách kiểm) ở `components/accordion.md`.
-Công thức lõi, giống nhóm sidebar (`layouts/app.md`):
+Công thức lõi, giống nhóm sidebar (`layouts/app/shell.md`):
 
 ```tsx
 <button type="button" aria-expanded={isOpen} aria-controls={panelId} onClick={() => setIsOpen(!isOpen)}>
