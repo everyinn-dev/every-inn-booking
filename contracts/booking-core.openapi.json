@@ -1869,9 +1869,28 @@
         "operationId": "modifyBooking",
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
-        "summary": "Change room/time/type/guests/notes (expectedVersion). Moves inventory atomically, re-prices, re-evaluates the promotion snapshot (dropPromotion=true to remove it). Phone is immutable.",
+        "summary": "Change room/time/guests/notes (expectedVersion). Moves inventory atomically, re-prices, re-evaluates the promotion snapshot (dropPromotion=true to remove it). Phone is immutable. The booking type is LOCKED (422 BOOKING_TYPE_LOCKED: cancel + re-create instead). Changing a custom price or an incidental charge needs `reason` (400 REASON_REQUIRED); the BOOKING_UPDATED audit keeps before/after of the money/time fields.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["expectedVersion"],
+                "properties": {
+                  "expectedVersion": { "type": "integer" },
+                  "bookingType": { "enum": ["hourly", "overnight", "dayuse", "custom"], "description": "Must equal the current type (422 BOOKING_TYPE_LOCKED otherwise)." },
+                  "customPrice": { "type": "integer" },
+                  "incidentalFee": { "type": "integer" },
+                  "incidentalReason": { "type": "string" },
+                  "reason": { "type": "string", "description": "Required when a custom price or an incidental charge changes." },
+                  "dropPromotion": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
         "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
       }
     },
@@ -1881,7 +1900,7 @@
         "operationId": "extendBooking",
         "x-callers": ["admin-bff", "agent-core"],
         "x-idempotency": "required",
-        "summary": "Extend checkout by `hours` (default 1, legacy extend1h): fee from the rate rule unless `feeOverride` (a price the quản lí approved), claims occupancy + turnover slots. Requires a staff actor — agent-core passes the approving staff member (Telegram) or the staff who granted the auto-approval (AI-7 OD-26); the AI bot actor (900001) gets 403 HUMAN_APPROVAL_REQUIRED.",
+        "summary": "Extend checkout by `hours` (default 1, legacy extend1h; 422 EXTEND_NOT_APPLICABLE for custom bookings): fee from the rate rule unless `feeOverride` (a price the quản lí approved), claims occupancy + turnover slots. Requires a staff actor — agent-core passes the approving staff member (Telegram) or the staff who granted the auto-approval (AI-7 OD-26); the AI bot actor (900001) gets 403 HUMAN_APPROVAL_REQUIRED.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" }, "hours": { "type": "integer", "minimum": 1, "maximum": 6 }, "feeOverride": { "type": "integer", "minimum": 0, "maximum": 20000000 }, "reason": { "type": "string", "maxLength": 200 } } } } } },
         "responses": { "200": { "$ref": "#/components/responses/Booking" }, "default": { "$ref": "#/components/responses/Error" } }
@@ -1892,7 +1911,7 @@
       "post": {
         "operationId": "extendQuote",
         "x-callers": ["admin-bff", "agent-core"],
-        "summary": "Read-only dry run of extend: availability of [checkout, checkout + hours] incl. the 60′ turnover before the next booking, the table fee, and the longest extension (1–6 h) that still fits.",
+        "summary": "Read-only dry run of extend (422 EXTEND_NOT_APPLICABLE for custom bookings): availability of [checkout, checkout + hours] incl. the 60′ turnover before the next booking, the table fee, and the longest extension (1–6 h) that still fits.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "hours": { "type": "integer", "minimum": 1, "maximum": 6 } } } } } },
         "responses": {
           "200": { "description": "Dry-run result", "content": { "application/json": { "schema": { "type": "object", "required": ["bookingId", "hours", "available", "fee", "checkoutAt", "newCheckoutAt", "maxHours"], "properties": { "bookingId": { "type": "string" }, "roomId": { "type": "string" }, "roomClass": { "type": "string" }, "version": { "type": "integer" }, "hours": { "type": "integer" }, "available": { "type": "boolean" }, "conflict": { "type": ["object", "null"] }, "extraHourFee": { "type": "integer" }, "fee": { "type": "integer" }, "checkoutAt": { "type": "string" }, "newCheckoutAt": { "type": "string" }, "maxHours": { "type": "integer" }, "latestCheckoutAt": { "type": ["string", "null"] } } } } } },
@@ -2122,7 +2141,7 @@
         "operationId": "cancelBooking",
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
-        "summary": "Soft cancel (replaces legacy hard delete) before checkout: frees inventory, optional refund ≤ net received (ledger entry in the same transaction), records CDP outcome for counted bookings (no loyalty reversal in mock-v1). reasonCode 'no_show' is rejected (use /no-show); 'other' requires a reason.",
+        "summary": "Soft cancel (replaces legacy hard delete) before checkout: frees inventory, gives the promotion usage back, optional refund ≤ net received (ledger entry in the same transaction), records CDP outcome for counted bookings (no loyalty reversal in mock-v1). reasonCode 'no_show' is rejected (use /no-show); 'other' requires a reason.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": {
           "required": true,
