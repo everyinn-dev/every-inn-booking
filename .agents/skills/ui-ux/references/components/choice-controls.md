@@ -103,7 +103,7 @@ Cả hai không cần phần tử phụ, không cần icon. Cỡ nhỏ `size-4`:
 - **Nhóm radio luôn có sẵn một lựa chọn** (thường là cái phổ biến nhất). Radio không bỏ chọn được, nên nhóm trắng từ đầu là người dùng không quay lại được trạng thái "chưa chọn". Ngoại lệ: chọn sai gây hậu quả tiền bạc (gói trả phí) thì để trống và bắt chọn.
 - Bọc nhóm trong `<fieldset>` + `<legend>` là câu hỏi. Không có legend thì trình đọc màn hình đọc "Giao tiêu chuẩn, nút radio" mà không biết đang hỏi gì.
 - Từ 5 lựa chọn trở lên thì dùng select.
-- **Xếp nhóm: một hàng ngang hoặc một cột dọc, không lưới hai cột.** Từ `sm` nhãn ngắn vừa một hàng thì `flex gap-6`; dưới `sm` thì dọc. Lưới 2×2 đọc thành chữ Z, thang có thứ tự như mức ưu tiên ra "Thấp, Trung bình / Cao, Khẩn cấp", mắt phải nhảy về đầu hàng mới biết "Cao" đứng sau "Trung bình" (`R6`).
+- **Xếp nhóm: một hàng ngang hoặc một cột dọc, không lưới hai cột.** Từ `sm` nhãn ngắn vừa một hàng thì `flex gap-6`; dưới `sm` thì dọc. Lưới 2×2 đọc thành chữ Z, thang có thứ tự như mức ưu tiên ra "Thấp, Trung bình / Cao, Khẩn cấp", mắt phải nhảy về đầu hàng mới biết "Cao" đứng sau "Trung bình" (`R6`). Lưới ô icon chọn danh mục, chọn loại (mỗi ô một icon trên nhãn ngắn) thì xếp lưới được: tập đó không có thứ tự, và đó là cách số đông app làm.
 - **Dưới `sm` mỗi lựa chọn là một dòng cao 44px bấm được cả dòng**: `<label>` bọc cả ô lẫn chữ, `flex w-fit min-h-11 items-center gap-3` (vẫn đúng `I26`: rộng bằng ô + chữ, không kéo hết hàng). Ô 20px với nhãn cao 20px thì vùng bấm chỉ 20px, hai hàng cách 12px thì ngón tay chạm khe giữa là trượt (probe báo 20×20 ở cùng form).
 
 ## Card chọn
@@ -137,7 +137,7 @@ chọn; chỉ tô nền thì cả card đổi màu, quá nặng.
 
 ## Công tắc
 
-Công tắc = **có hiệu lực ngay**, không chờ nút Lưu (`layouts/app.md`, trang cài
+Công tắc = **có hiệu lực ngay**, không chờ nút Lưu (`layouts/app/settings.md`, trang cài
 đặt). Cần bấm Lưu mới có hiệu lực thì dùng checkbox.
 
 ```html
@@ -172,7 +172,7 @@ Công tắc = **có hiệu lực ngay**, không chờ nút Lưu (`layouts/app.md
   Bật lên mà phải quét mã, nhập mật khẩu, thanh toán hay xác nhận thì là **nút mở
   luồng**, cạnh một dòng trạng thái ("Chưa bật" / "Bật từ 12/06/2026"). Công tắc mở
   modal thì bấm Huỷ giữa chừng làm công tắc bật lên rồi bật về, và dấu "Đã lưu" hiện
-  lúc chưa có gì được lưu. Xem "Trang bảo mật" ở `../layouts/app.md`.
+  lúc chưa có gì được lưu. Xem "Trang bảo mật" ở `../layouts/app/security.md`.
 
 ---
 
@@ -198,10 +198,11 @@ không `focus:`**: chọn bằng chuột xong, focus trả về nút, `focus:` l
 - Lỗi: y như ô nhập, `border-red-500`, quầng `ring-red-500/10` chỉ khi đang focus.
 
 **Danh sách mở ra** theo khung dropdown ở `layouts/overlay.md` (`rounded-2xl`,
-`p-1`, mục `h-10 rounded-xl`, portal ra `body` theo `I22`):
+`p-1`, mục `min-h-10 rounded-xl` cách nhau `gap-1`, portal ra `body` theo `I22`):
 
 - Rộng **bằng nút mở** (Radix: `w-(--radix-select-trigger-width)`), cách nút `mt-2`. Nội dung bên trong (ô tìm, danh sách) rộng hết khung, **không chặn `max-w`** trên nó: khung đã rộng bằng nút mà nội dung dừng ở `24rem` thì bên phải còn một dải trống, thanh cuộn nằm lọt giữa (probe báo "Lớp nổi có dải trống").
-- Cao tối đa **`max-h-76`** (304px), cuộn bên trong: lộ 7 mục rưỡi, mục thứ 8 bị cắt ngang để báo còn nữa (`I18`). `max-h-72` cũ cắt đúng sát ranh giới mục thứ 8 (chỉ lộ 4px), nhìn như danh sách hết ở mục 7. Mở ra thì cuộn sẵn tới mục đang chọn và chớp thanh cuộn một lần (`flashScrollbar`, `I18`). Danh sách chiếm cả khung `rounded-2xl` nên cả hai đầu rãnh chạm góc bo: `[&::-webkit-scrollbar-track]:my-4`, khe `p-1 pr-0 [scrollbar-gutter:stable]` (`I18`).
+- Cao tối đa **`max-h-83`** (332px), cuộn bên trong: lộ 7 mục rưỡi, mục thứ 8 bị cắt ngang để báo còn nữa (`I18`). Tính theo mục 40px + khe 4px (`rules-state.md`); cắt sát ranh giới hai mục thì nhìn như danh sách hết ở đó. Mở ra thì cuộn sẵn tới mục đang chọn và chớp thanh cuộn một lần (`flashScrollbar`, `I18`). Danh sách chiếm cả khung `rounded-2xl` nên cả hai đầu rãnh chạm góc bo: `[&::-webkit-scrollbar-track]:my-4`, khe `p-1 pr-0 [scrollbar-gutter:stable]` (`I18`).
+- **Tên lựa chọn dài** (tên khoá học, tên dự án): khung rộng **tối thiểu** bằng nút mở; nút lọc co theo chữ (`w-fit`, "Khoá học ▾") thì khung `w-72`, không hẹp theo nút. Tên vẫn dài hơn thì xuống dòng trong mục (`min-h-10 py-2.5`, `text-pretty`), không `truncate`: nhiều tên chung đầu "Khoá học HTML CSS…", cắt cụt là không phân biệt được. Nút mở hiện tên đã chọn thì `max-w-60 truncate` kèm `title`.
 - **Mục có mô tả** (vai trò, gói, quyền): hai tầng, tên `text-sm font-medium` + một câu `text-sm text-muted` nói **quyền làm được gì**, mục cao theo nội dung (`py-2.5`), không ép `h-10`. Ô đã đóng chỉ hiện tên, không hiện mô tả. Chọn quyền mà không có câu này thì người mời phải đoán "Thành viên" khác "Chỉ xem" chỗ nào.
 - **Mục đang chọn**: chữ `font-medium` + icon `check` `size-4` căn phải. Nền xám `bg-item-hover` là của **mục đang sáng** (chuột hoặc phím mũi tên, `data-[highlighted]`), không phải của mục đang chọn; mở ra thì mục đang chọn sáng trước.
 - Trên 8 mục: **ô tìm ở đầu danh sách**, icon `search` trái, placeholder "Tìm tỉnh, thành phố", đường chia bên dưới tràn hai mép (`F25`). Gợi ý (người dùng quyết): gõ là lọc ngay, không bấm Enter; lọc ở máy hay gọi server thì để handler rỗng. Không ra kết quả thì một dòng `text-muted` căn giữa: *Không tìm thấy tỉnh, thành phố nào*. **Không nhắc lại từ khoá**: nó nằm ngay ô tìm phía trên (`N3`), và từ khoá dài bị cắt giữa chữ thành "của phò…".
@@ -285,7 +286,7 @@ Bấm năm    ──►   lưới 12 năm (2020–2031), ‹ › nhảy 12 năm
     - **Không đỏ, kể cả lúc rê.** Đỏ khi rê (`I4`) dành cho xoá **bản ghi**: mất một thứ. Gỡ hạn là đổi một giá trị về trống, đặt lại là có: ba câu của `I4` đều "không". Tô đỏ thì người ta ngần ngại bấm một việc vô hại, và làm nhạt nghĩa của đỏ ở mục "Xoá công việc" ngay trong menu ba chấm cùng dòng. Không hỏi xác nhận.
     - Ô chưa có hạn thì không có hàng này (không có gì để gỡ).
   - Ô mở popover giữ nền hover suốt lúc popover mở (`aria-expanded:bg-foreground/8`, không `bg-surface-hover` vì trùng nền dòng đang rê, không `/5` vì gần trùng, `I10`), để biết lịch này đang sửa ô nào.
-  - **Dấu bấm được lúc đứng yên**: ô sửa tại chỗ là việc phụ (hạn chót giữa ba bốn ô sửa được của một dòng việc) thì chỉ hiện lúc rê; ô là **việc chính của trang** (vai trò ở trang thành viên) thì `ChevronDown` luôn hiện. Xem "Trang thành viên và phân quyền" trong `../layouts/app.md`.
+  - **Dấu bấm được lúc đứng yên**: ô sửa tại chỗ là việc phụ (hạn chót giữa ba bốn ô sửa được của một dòng việc) thì chỉ hiện lúc rê; ô là **việc chính của trang** (vai trò ở trang thành viên) thì `ChevronDown` luôn hiện. Xem "Trang thành viên và phân quyền" trong `../layouts/app/members.md`.
   - Gợi ý (người dùng quyết): hàng mốc nhanh "Hôm nay · Ngày mai · Thứ Hai tới" trên lưới. Hạn chót đa phần rơi vào vài ngày tới.
 - Kiểu khác, chỉ dựng khi đề yêu cầu: **hai select tháng và năm** thay cho tiêu đề (hợp ô ngày sinh, năm lùi vài chục năm). Mặc định vẫn là tiêu đề bấm được ở trên.
 
@@ -366,4 +367,4 @@ lên ô. Radix: `side="bottom"` + `avoidCollisions`, không bật `sticky="alway
 Khoá thì mờ cả nhãn đi cùng ô (`peer-disabled:` hoặc `has-disabled:` trên
 `<label>`). Ô mờ mà nhãn vẫn đen thì người dùng bấm vào nhãn, không có gì xảy ra.
 
-**Khoá thì nói vì sao, ngay dưới ô**, bằng dòng gợi ý `text-xs text-muted`: "Liên hệ quản trị viên để đổi giờ chốt sổ". Trong **hàng cài đặt** có mô tả `text-sm` thì câu lý do (và câu lỗi) thay chỗ mô tả và giữ `text-sm`, không xuống `text-xs` (`../layouts/app.md`, "Trang cài đặt"). Ô mờ mà không một lời thì người dùng tưởng app lỗi, và không biết đi đâu để đổi.
+**Khoá thì nói vì sao, ngay dưới ô**, bằng dòng gợi ý `text-xs text-muted`: "Liên hệ quản trị viên để đổi giờ chốt sổ". Trong **hàng cài đặt** có mô tả `text-sm` thì câu lý do (và câu lỗi) thay chỗ mô tả và giữ `text-sm`, không xuống `text-xs` (`../layouts/app/settings.md`, "Trang cài đặt"). Ô mờ mà không một lời thì người dùng tưởng app lỗi, và không biết đi đâu để đổi.

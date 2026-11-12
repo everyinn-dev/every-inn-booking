@@ -11,7 +11,7 @@ chê. Vòng tra tấn bắt buộc nằm ở `checklist.md` cổng 3.
 
 Triệu chứng dễ nhận nhất: cuộn sang ngang thì thấy **một mảng trống** bên phải, vì có một phần tử nào đó rộng hơn màn đẩy cả trang ra. Thấy mảng trống đó là biết ngay có thứ gì đang tràn, đi tìm bằng cách bỏ dần `min-w-0` ra. Nội dung thật sự rộng thì cho cuộn trong khung riêng `overflow-x-auto`, đừng để nó đẩy cả trang. Kiểm ở 375px **trước khi** báo xong.
 
-**R2. Lưới xuống một cột ở mobile.** Mặc định `grid-cols-1`, rồi mới `sm:grid-cols-2` và `lg:grid-cols-4`. Ngoại lệ: hàng ô số liệu 2×2 ở mobile khi mọi số vừa ô (`components/charts.md`, "Ô số liệu ở màn hẹp").
+**R2. Lưới xuống một cột ở mobile.** Mặc định `grid-cols-1`, rồi mới `sm:grid-cols-2` và `lg:grid-cols-4`. **Không bao giờ để `grid` trơn chờ `lg:` mới khai cột** (`grid gap-8 lg:grid-cols-[1.1fr_1fr]`): cột ngầm là `auto`, nở theo phần tử rộng nhất bên trong (ô tìm cạnh nút, hàng chip, bảng), cả trang trượt ngang ở 375. `grid-cols-1` của Tailwind là `minmax(0, 1fr)`, ép cột vừa màn. Cột tự viết bằng `[...]` cũng dùng `minmax(0,1fr)`, không dùng `1fr` trơn. Ngoại lệ: hàng ô số liệu 2×2 ở mobile khi mọi số vừa ô (`components/charts.md`, "Ô số liệu ở màn hẹp").
 
 **R3. Không để phần tử rớt hàng lẻ.** Wrap mà còn dư một cái đứng một mình ở hàng dưới thì đọc ra là lỗi, không phải là thiết kế.
 
@@ -29,9 +29,11 @@ Triệu chứng dễ nhận nhất: cuộn sang ngang thì thấy **một mảng
 3. Giảm cỡ chữ một bậc.
 4. Cắt tiêu đề còn tối đa hai dòng bằng `line-clamp-2`.
 
+**Card ảnh cạnh chữ (ảnh ngang bên trái, tiêu đề to bên phải) thì ở mobile xếp dọc**: ảnh lên trên, rộng hết card, chữ xuống dưới (`flex-col sm:flex-row`). Giữ bố cục ngang ở 375 thì cột chữ còn chừng 180px: tiêu đề 30px vỡ ba dòng, nhãn phụ hai dòng, ảnh lơ lửng giữa một khối chữ cao gấp đôi nó. Muốn giữ ngang (dòng danh sách) thì đi bước 2 và 3: ảnh vuông nhỏ, tiêu đề `text-base`, căn đỉnh (`items-start`). Probe đo: chữ từ 20px mà ba dòng trong cột hẹp hơn 60% màn.
+
 Và luôn giữ: **ngày tháng, nhãn phụ phải nhỏ hơn tiêu đề ít nhất một bậc.** Tiêu đề `text-sm` thì ngày `text-xs`. Bằng nhau là mắt không biết đọc cái nào trước.
 
-**R6. Ngoại lệ của R1 và R2: thứ tự tuyến tính thì không được wrap.** Board trạng thái, các bước quy trình, dòng thời gian, hàng chip lọc, hàng tab đều thuộc loại này. Xếp thành hai hàng thì mắt đọc theo hình chữ Z và mất dòng chảy; bốn chip ở 375px thì ba cái một hàng và một cái rớt xuống đứng lẻ, nhìn như lỗi. Cho cuộn ngang trong khung, mỗi phần tử `shrink-0`, cột kanban `w-[248px] grow max-w-[320px]` (vì sao thì xem `layouts/app.md`).
+**R6. Ngoại lệ của R1 và R2: thứ tự tuyến tính thì không được wrap.** Board trạng thái, các bước quy trình, dòng thời gian, hàng chip lọc, hàng tab đều thuộc loại này. Xếp thành hai hàng thì mắt đọc theo hình chữ Z và mất dòng chảy; bốn chip ở 375px thì ba cái một hàng và một cái rớt xuống đứng lẻ, nhìn như lỗi. Cho cuộn ngang trong khung, mỗi phần tử `shrink-0`, cột kanban `w-[248px] grow max-w-[320px]` (vì sao thì xem `layouts/app/kanban.md`).
 
 **Chip đang lọc (bấm để gỡ) không phải thứ tự tuyến tính**, nên không thuộc R6: từ `sm` trở lên cho `flex-wrap`, đặt thành một hàng riêng dưới thanh lọc, "Xoá lọc" nằm cuối và luôn thấy. Dưới `sm` mới cuộn ngang, và "Xoá lọc" đứng **ngoài** khung cuộn (`shrink-0`), không nằm cuối hàng cuộn. Nằm trong khung cuộn thì nhiều chip là "Xoá lọc" khuất theo, đúng nút cần nhất lại không thấy.
 
@@ -54,6 +56,13 @@ gom vào một `<div class="px-3 sm:px-5">`. Khối nằm giữa khung trang và
 nới `max-w` thêm đúng phần lấn ra hai bên, không thì các khối anh em hẹp lại.
 
 Cách khác cũng được: chèn phần tử đệm cuối hàng, `<div class="w-3 shrink-0 sm:w-5" aria-hidden="true"></div>`.
+
+**Hàng cuộn có hít (`snap-x` + `snap-start`) thì khung cuộn mang `scroll-px` bằng đúng lề nội dung**
+(`scroll-px-4` với lề 16px). Thiếu thì trình duyệt hít mép card vào **mép khung cuộn**, mà khung cuộn
+chạm mép màn: cuộn qua thả tay là card giật sát lề, lệch khỏi tiêu đề khối phía trên, mỗi lần cuộn
+một lần giật. Cách cũ `pl-4` trên hàng trong cũng không
+đủ, `scroll-padding` mới là chỗ hít dừng. Mẫu đủ: `<div class="snap-x snap-mandatory scroll-px-4
+overflow-x-auto"><div class="flex gap-4 px-4">…card `snap-start shrink-0`…</div></div>`.
 
 ---
 
@@ -83,9 +92,9 @@ vẫn `h-11 md:h-10`, xem `budgets.md`.
 ```
 
 - **`min-w`** cho khối bọc bảng, đủ để mọi cột thở. Không có nó thì bảng vẫn co.
-- **`whitespace-nowrap`** cho ô ngày tháng, số, trạng thái, **tên người**. Tên người xuống dòng thì cột co còn một chữ ("Nguyễn / Anh / Tuấn"), cắt đuôi thì mất tên gọi (`layouts/app.md`, bảng nhóm theo trạng thái). Chỉ mô tả, tiêu đề dài mới cho xuống dòng.
+- **`whitespace-nowrap`** cho ô ngày tháng, số, trạng thái, **tên người**. Tên người xuống dòng thì cột co còn một chữ ("Nguyễn / Anh / Tuấn"), cắt đuôi thì mất tên gọi (`layouts/app/data-table.md`, bảng nhóm theo trạng thái). Chỉ mô tả, tiêu đề dài mới cho xuống dòng.
 - Lề đặt trên **khối bên trong**, không đặt trên khung cuộn. Xem R6.
-- Cuộn ngang thì **bắt buộc** ghim cột nhận diện (thường là cột đầu) bằng `sticky left-0` kèm nền `--surface`, cột ghim không quá ~40% khung. Cột đầu rộng hơn thế (tên + email) thì đừng cuộn: **dưới `sm`, bảng quản lý thành danh sách dòng** (`layouts/app.md`, mục Bảng dữ liệu). Cuộn mà không ghim thì cuộn một nhịp là mất tên, các ô còn lại không biết của ai.
+- Cuộn ngang thì **bắt buộc** ghim cột nhận diện (thường là cột đầu) bằng `sticky left-0` kèm nền `--surface`, cột ghim không quá ~40% khung. Cột đầu rộng hơn thế (tên + email) thì đừng cuộn: **dưới `sm`, bảng quản lý thành danh sách dòng** (`layouts/app/data-table.md`, mục Bảng dữ liệu). Cuộn mà không ghim thì cuộn một nhịp là mất tên, các ô còn lại không biết của ai.
 
 Đây là ngoại lệ hợp lệ của R1, cùng loại với R6: cuộn trong khung chứ không phải cả trang.
 
@@ -102,7 +111,7 @@ sidebar mở, quá 6 cột là bắt đầu chật.
 
 Đừng để `flex-wrap`, đó là cách duy nhất sai trong ba cách trên.
 
-**Hàng cuộn ngang thì mép mờ dần ở phía còn mục bị khuất**, cùng cách với vùng nav sidebar (`layouts/app.md`): `mask-image` 32px, mép trái mờ khi đã cuộn khỏi đầu, mép phải mờ khi còn mục phía sau, tính cờ từ `scrollLeft`/`scrollWidth`/`clientWidth`. Thanh cuộn đã ẩn (`scrollbar-clean`) nên mép cắt thẳng qua chữ không báo được gì: ở 375px hàng chip cắt ngang "Bán|", còn tab "Ngừng giao dịch 6" nằm hẳn ngoài khung, trông như chỉ có ba trạng thái. Áp cho hàng tab, hàng chip, và khung bảng cuộn ngang (`R9`).
+**Hàng cuộn ngang thì mép mờ dần ở phía còn mục bị khuất**, cùng cách với vùng nav sidebar (`layouts/app/shell.md`): `mask-image` 32px, mép trái mờ khi đã cuộn khỏi đầu, mép phải mờ khi còn mục phía sau, tính cờ từ `scrollLeft`/`scrollWidth`/`clientWidth`. Thanh cuộn đã ẩn (`scrollbar-clean`) nên mép cắt thẳng qua chữ không báo được gì: ở 375px hàng chip cắt ngang "Bán|", còn tab "Ngừng giao dịch 6" nằm hẳn ngoài khung, trông như chỉ có ba trạng thái. Áp cho hàng tab, hàng chip, và khung bảng cuộn ngang (`R9`).
 
 **Ở máy có chuột, hàng cuộn ngang phải có nút mũi tên ở phía còn mục bị khuất.** Dựng sẵn, không hỏi. Chuột thường chỉ có bánh cuộn dọc; thanh cuộn đã ẩn (`scrollbar-clean`) thì người dùng chuột không có cách nào tới mục phía sau, mép mờ chỉ báo "còn", không cho kéo. Máy có trackpad hay chuột cuộn ngang thì kéo được nên người làm không thấy lỗi. Hàng tab, chip, dải card ở desktop đều giống nhau:
 
