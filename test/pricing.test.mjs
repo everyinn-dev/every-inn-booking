@@ -21,10 +21,10 @@ test('Promo: Normal weekday (Wednesday 2026-11-18) applies full discount', () =>
 
   assert.equal(signature.isSale, true);
   assert.equal(signature.reason, 'promo');
-  assert.equal(signature.badgeText, '-15%');
-  assert.equal(signature.prices.combo3h, 306_000);
-  assert.equal(signature.prices.overnight, 527_000);
-  assert.equal(signature.prices.dayroom, 637_500);
+  assert.equal(signature.badgeText, '-10%');
+  assert.equal(signature.prices.combo3h, 324_000);
+  assert.equal(signature.prices.overnight, 558_000);
+  assert.equal(signature.prices.dayroom, 675_000);
 
   assert.equal(isSpecialDealActive(wednesday), true);
 });
@@ -41,8 +41,8 @@ test('Promo: Friday (2026-11-20) keeps dayroom at base price, discounts combo3h 
 
   const signature = getEffectivePrices('signature', friday);
   assert.equal(signature.isSale, true);
-  assert.equal(signature.prices.combo3h, 306_000);
-  assert.equal(signature.prices.overnight, 527_000);
+  assert.equal(signature.prices.combo3h, 324_000);
+  assert.equal(signature.prices.overnight, 558_000);
   assert.equal(signature.prices.dayroom, BASE_PRICES.signature.dayroom); // 750,000 unchanged
 
   assert.equal(isSpecialDealActive(friday), true);
