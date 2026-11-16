@@ -31,7 +31,7 @@ export const PRICE_MANAGER = {
   promo: {
     enabled: true,
     label: 'Ưu đãi tháng 11',
-    badgeText: '-10% ~ -15%',
+    badgeText: '-10%',
     days: [0, 1, 2, 3, 4, 5], // Chủ Nhật đến Thứ Sáu (Thứ 7 không áp dụng)
     startsOn: '2026-10-06' as string | null,
     endsOn: '2026-11-30' as string | null, // Gia hạn đến hết 30/11
@@ -39,11 +39,11 @@ export const PRICE_MANAGER = {
     percentValue: 10,
     percentByClass: {
       haven: 10,     // Giảm 10% hạng Haven
-      signature: 15, // Giảm 15% hạng Signature
+      signature: 10, // Giảm 10% hạng Signature
     } as Record<RoomClassKey, number>,
     badgeTextByClass: {
       haven: '-10%',
-      signature: '-15%',
+      signature: '-10%',
     } as Record<RoomClassKey, string>,
     // Các ngày Lễ không áp dụng giảm giá (định dạng YYYY-MM-DD)
     holidays: [
