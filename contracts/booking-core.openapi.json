@@ -1135,9 +1135,10 @@
       "Roster": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["date", "summary", "checkins", "checkouts"],
+        "required": ["date", "summary", "checkins", "checkouts", "blocks"],
         "properties": {
           "date": { "$ref": "#/components/schemas/BusinessDate" },
+          "blocks": { "type": "array", "description": "Active room blocks overlapping the business date (front desk: rooms out of order / closed).", "items": { "$ref": "#/components/schemas/Block" } },
           "summary": {
             "type": "object",
             "additionalProperties": false,
@@ -2428,7 +2429,7 @@
         "operationId": "createBlock",
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
-        "summary": "Maintenance block: claims the occupancy lane only (may start exactly at a checkout). Role: blockType stop_sell / owner_stay is manager-only (403 FORBIDDEN_ROLE); maintenance / deep_cleaning any staff.",
+        "summary": "Room block: claims the occupancy lane (may start exactly at a checkout); owner_stay also claims the 60' turnover lane like a stay. On conflict the 409 details carry alternatives (free rooms for the same window). Role: blockType stop_sell / owner_stay is manager-only (403 FORBIDDEN_ROLE); maintenance / deep_cleaning any staff.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": {
           "required": true,
@@ -2545,6 +2546,21 @@
         }
       }
     },
+    "/internal/v1/room-blocks/release-bulk": {
+      "post": {
+        "operationId": "releaseBlocksBulk",
+        "x-callers": ["admin-bff"],
+        "summary": "Reopen up to 100 blocks in ONE batch (all-or-nothing). Running blocks are cut at the next 30' slot (history kept); ended or already released blocks are reported in skipped. Role per block type (stop_sell / owner_stay = manager).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["blocks"], "properties": { "blocks": { "type": "array", "items": { "type": "object", "required": ["id", "expectedVersion"], "properties": { "id": { "type": "string" }, "expectedVersion": { "type": "integer" } } } }, "reason": { "type": "string" } } } } } },
+        "responses": {
+          "200": {
+            "description": "Released blocks and skipped ones",
+            "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["released", "skipped"], "properties": { "released": { "type": "array", "items": { "$ref": "#/components/schemas/Block" } }, "skipped": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "reason"], "properties": { "id": { "type": "string" }, "reason": { "type": "string" } } } } } } } }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/internal/v1/room-blocks/{blockId}": {
       "parameters": [{ "$ref": "#/components/parameters/BlockId" }],
       "patch": {
@@ -2560,7 +2576,7 @@
       "post": {
         "operationId": "releaseBlock",
         "x-callers": ["admin-bff"],
-        "summary": "Soft release (replaces legacy DELETE); frees the slots. Role: blockType stop_sell / owner_stay is manager-only (403 FORBIDDEN_ROLE); maintenance / deep_cleaning any staff.",
+        "summary": "Soft release (replaces legacy DELETE); frees the slots. A running block is cut at the next 30' slot (history kept); an ended block returns 409 BLOCK_ENDED. Role: blockType stop_sell / owner_stay is manager-only (403 FORBIDDEN_ROLE); maintenance / deep_cleaning any staff.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" }, "reason": { "type": "string" } } } } } },
         "responses": { "200": { "$ref": "#/components/responses/Block" }, "default": { "$ref": "#/components/responses/Error" } }
       }
