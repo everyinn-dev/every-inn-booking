@@ -514,7 +514,7 @@
                       "rates": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/CalendarRate" } },
                       "closures": {
                         "type": "array",
-                        "items": { "type": "object", "additionalProperties": false, "required": ["id", "blockType", "reason", "from", "to", "version"], "properties": { "id": { "type": "string" }, "blockType": { "$ref": "#/components/schemas/BlockType" }, "reason": { "type": "string" }, "from": { "$ref": "#/components/schemas/Instant" }, "to": { "$ref": "#/components/schemas/Instant" }, "version": { "type": "integer" } } }
+                        "items": { "type": "object", "additionalProperties": false, "required": ["id", "blockType", "reason", "from", "to", "version", "coverage"], "properties": { "id": { "type": "string" }, "blockType": { "$ref": "#/components/schemas/BlockType" }, "reason": { "type": "string" }, "from": { "$ref": "#/components/schemas/Instant" }, "to": { "$ref": "#/components/schemas/Instant" }, "version": { "type": "integer" }, "coverage": { "enum": ["full", "partial"], "description": "full = block covers 12:00→24:00 VN of the date (date not sellable); partial = shorter overlap, price still shown." } } }
                       },
                       "bookings": { "type": "integer" },
                       "holds": { "type": "integer" },
@@ -2428,7 +2428,7 @@
         "operationId": "createBlock",
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
-        "summary": "Maintenance block: claims the occupancy lane only (may start exactly at a checkout).",
+        "summary": "Maintenance block: claims the occupancy lane only (may start exactly at a checkout). Role: blockType stop_sell / owner_stay is manager-only (403 FORBIDDEN_ROLE); maintenance / deep_cleaning any staff.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": {
           "required": true,
@@ -2550,7 +2550,7 @@
       "patch": {
         "operationId": "updateBlock",
         "x-callers": ["admin-bff"],
-        "summary": "Reschedule / reason / note (expectedVersion); slots re-claimed atomically.",
+        "summary": "Reschedule / reason / note (expectedVersion); slots re-claimed atomically. Role: blockType stop_sell / owner_stay is manager-only (403 FORBIDDEN_ROLE); maintenance / deep_cleaning any staff.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"] } } } },
         "responses": { "200": { "$ref": "#/components/responses/Block" }, "default": { "$ref": "#/components/responses/Error" } }
       }
@@ -2560,7 +2560,7 @@
       "post": {
         "operationId": "releaseBlock",
         "x-callers": ["admin-bff"],
-        "summary": "Soft release (replaces legacy DELETE); frees the slots.",
+        "summary": "Soft release (replaces legacy DELETE); frees the slots. Role: blockType stop_sell / owner_stay is manager-only (403 FORBIDDEN_ROLE); maintenance / deep_cleaning any staff.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["expectedVersion"], "properties": { "expectedVersion": { "type": "integer" }, "reason": { "type": "string" } } } } } },
         "responses": { "200": { "$ref": "#/components/responses/Block" }, "default": { "$ref": "#/components/responses/Error" } }
       }
