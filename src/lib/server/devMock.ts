@@ -98,7 +98,7 @@ function view(s: J & { version: number }) {
     serverNow: new Date().toISOString(),
     remainingSeconds: Math.max(0, Math.floor((Date.parse(String(s.expiresAt)) - Date.now()) / 1000)),
     remaining: Math.max(0, due - paid),
-    payment: s.status !== "holding" && due - paid > 0 ? { bankId: "MB", account: "0906314109999", holderName: "HO KINH DOANH EVERY INN", amount: due - paid, reference: s.reference, qrUrl: `https://img.vietqr.io/image/MB-VQRQAKTXQ5388-compact2.png?amount=${due - paid}&addInfo=${s.reference}&accountName=HO+KINH+DOANH+EVERY+INN` } : null,
+    payment: s.status !== "holding" && due - paid > 0 ? { bankId: "MB", account: "0906314109999", holderName: "HO KINH DOANH EVERY INN", amount: due - paid, reference: s.reference, qrUrl: `https://img.vietqr.io/image/MB-0906314109999-compact2.png?amount=${due - paid}&addInfo=${s.reference}` } : null,
     can: { editGuest: ["holding", "awaiting_payment"].includes(String(s.status)), claimPaid: ["awaiting_payment", "payment_claimed", "underpaid", "expired"].includes(String(s.status)), cancel: ["holding", "awaiting_payment"].includes(String(s.status)) },
   };
 }

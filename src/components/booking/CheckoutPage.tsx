@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { dayOf, mmss, stayLabel, timeOf, vnd } from "@/shared/booking-kit/format";
 import { useLongPoll, useServerCountdown } from "@/shared/booking-kit/live";
 import { LIVE_STATUSES, TIER_LABEL, type Preview, type SessionView } from "@/shared/booking-kit/types";
-import { api, copyText, downloadQrImage, roomMedia, writeActiveHold } from "@/lib/booking/client";
+import { api, copyText, roomMedia, writeActiveHold } from "@/lib/booking/client";
 
 const roomNumberOf = (s: SessionView) => s.room.id.split("-").pop() ?? s.room.id;
 
@@ -412,21 +412,10 @@ function GuestForm({ token, session, onSaved, say }: { token: string; session: S
 
 function PaymentPanel({ token, session: s, onUpdate, say, onEdit }: { token: string; session: SessionView; onUpdate: (s: SessionView) => void; say: (t: string) => void; onEdit: () => void }) {
   const [busy, setBusy] = useState(false);
-  const [downloadingQr, setDownloadingQr] = useState(false);
   const busyRef = useRef(false);
   const p = s.payment;
   const rejected = useMemo(() => s.timeline.at(-1)?.event === "OWNER_REJECTED", [s.timeline]);
   const copy = async (label: string, v: string) => say((await copyText(v)) ? `Đã copy ${label}` : "Không copy được — giữ lâu để copy");
-  const downloadQr = async () => {
-    if (!p?.qrUrl || downloadingQr) return;
-    setDownloadingQr(true);
-    try {
-      const ok = await downloadQrImage(p.qrUrl, `everyinn-${p.reference}.png`);
-      say(ok ? "Đã tải ảnh mã QR về máy" : "Không tải tự động được — bạn chạm giữ vào ảnh QR để lưu về máy nhé.");
-    } finally {
-      setDownloadingQr(false);
-    }
-  };
   const claim = async () => {
     if (busyRef.current || busy) return;
     busyRef.current = true;
@@ -458,17 +447,11 @@ function PaymentPanel({ token, session: s, onUpdate, say, onEdit }: { token: str
           <div className="bk-qr" style={{ marginTop: 12 }}>
             {p.qrUrl ? <img src={p.qrUrl} alt={`Mã VietQR chuyển ${vnd(p.amount)}`} /> : null}
             {p.qrUrl ? (
-              <button
-                type="button"
-                className="bk-btn bk-btn-outline"
-                style={{ minHeight: 38, padding: "0 16px", fontSize: 13 }}
-                onClick={downloadQr}
-                disabled={downloadingQr}
-              >
-                {downloadingQr ? "Đang tải mã QR…" : "⬇ Tải mã QR về máy"}
-              </button>
+              <a className="bk-link bk-small" href={p.qrUrl} download={`everyinn-${p.reference}.png`} target="_blank" rel="noopener noreferrer">
+                Tải mã QR
+              </a>
             ) : null}
-            <p className="bk-small bk-muted">Mở app ngân hàng → Quét mã QR (hoặc tải ảnh QR về máy để quét). Số tiền và nội dung đã điền sẵn.</p>
+            <p className="bk-small bk-muted">Mở app ngân hàng → Quét QR. Số tiền và nội dung đã điền sẵn.</p>
           </div>
           <div style={{ marginTop: 8 }}>
             {[

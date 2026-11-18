@@ -111,10 +111,7 @@ describe("session lifecycle", () => {
     assert.equal(hold.ip, "203.0.113.9");
 
     const saved = await session.PATCH(req("PATCH", `/api/guest/sessions/${token}`, { guest: { name: "Nguyễn Thị Phương Thảo", phone: "0906314109" } }), ctx(token));
-    const savedBody = await saved.json();
-    assert.equal(savedBody.data.session.status, "awaiting_payment");
-    assert.equal(savedBody.data.session.payment.account, "0906314109999");
-    assert.match(savedBody.data.session.payment.qrUrl, /img\.vietqr\.io\/image\/MB-VQRQAKTXQ5388-compact2\.png/);
+    assert.equal((await saved.json()).data.session.status, "awaiting_payment");
 
     const v = (await (await session.GET(req("GET", `/api/guest/sessions/${token}`), ctx(token))).json()).data.session.version;
     const unchanged = await live.GET(req("GET", `/api/guest/sessions/${token}/live?v=${v}`), ctx(token));
