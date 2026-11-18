@@ -100,6 +100,55 @@
         }
       }
     },
+    "/internal/v1/customers/search": {
+      "post": {
+        "operationId": "searchCustomers",
+        "summary": "Staff typeahead (create-booking form): customers by name / Instagram / Facebook / Zalo / phone prefix over the FTS index (migration 0005). Each hit names the matched field and the last booking date so same-name guests can be told apart. ≤ 10 hits, most recent booking first.",
+        "x-callers": ["admin-bff"],
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/ActorId" }, { "$ref": "#/components/parameters/ActorRole" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerSearchRequest" } } } },
+        "responses": {
+          "200": { "description": "Hits", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerSearchResult" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/maintenance/search-reindex": {
+      "post": {
+        "operationId": "reindexCustomerSearch",
+        "summary": "Rebuilds customer_search_fts one keyset page (30 customers) at a time. Idempotent; call until nextCursor is null (after migration 0005, a legacy backfill or a D1 restore). Manager only.",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/ActorId", "required": true }, { "$ref": "#/components/parameters/ActorRole", "required": true }, { "$ref": "#/components/parameters/ActorName" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SearchReindexRequest" } } } },
+        "responses": {
+          "200": { "description": "Page indexed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SearchReindexResult" } } } },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/internal/v1/customers/{customerId}/phone": {
+      "parameters": [{ "$ref": "#/components/parameters/CustomerId" }],
+      "post": {
+        "operationId": "changeCustomerPhone",
+        "summary": "Re-keys the customer's phone (manager only). customer_id, tier, stamps, vouchers and booking links stay; the old number is retired into customer_phone_history so accruals for bookings created before the change still resolve to this customer. 409 PHONE_TAKEN when the new number already belongs to another profile (merge is not supported); 409 VERSION_CONFLICT on a stale expectedVersion.",
+        "x-callers": ["admin-bff"],
+        "x-required-role": "manager",
+        "parameters": [{ "$ref": "#/components/parameters/Caller" }, { "$ref": "#/components/parameters/ActorId", "required": true }, { "$ref": "#/components/parameters/ActorRole", "required": true }, { "$ref": "#/components/parameters/ActorName" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PhoneChangeRequest" } } } },
+        "responses": {
+          "200": { "description": "Updated profile", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerEnvelope" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "422": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/internal/v1/customers/{customerId}": {
       "parameters": [{ "$ref": "#/components/parameters/CustomerId" }],
       "get": {
@@ -511,9 +560,89 @@
       },
       "CustomerLookup": {
         "oneOf": [
-          { "type": "object", "additionalProperties": false, "required": ["found", "customer"], "properties": { "found": { "const": false }, "customer": { "type": "null" } } },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["found", "customer"],
+            "properties": {
+              "found": { "const": false },
+              "customer": { "type": "null" },
+              "retiredPhone": {
+                "description": "Present when the number was retired by a staff phone change; points at the profile that now owns its history.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["customerId", "changedAt", "currentPhoneMasked", "currentPhoneNational", "fullName"],
+                "properties": {
+                  "customerId": { "type": "string" },
+                  "changedAt": { "$ref": "#/components/schemas/Instant" },
+                  "currentPhoneMasked": { "type": ["string", "null"] },
+                  "currentPhoneNational": { "type": ["string", "null"] },
+                  "fullName": { "type": ["string", "null"] }
+                }
+              }
+            }
+          },
           { "type": "object", "additionalProperties": false, "required": ["found", "customer"], "properties": { "found": { "const": true }, "customer": { "$ref": "#/components/schemas/AdminCustomer" } } }
         ]
+      },
+      "CustomerSearchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["q"],
+        "properties": {
+          "q": { "type": "string", "maxLength": 80, "description": "Name, Instagram/Facebook/Zalo handle or phone prefix; folded (lowercase, no diacritics, đ→d); ≥ 2 characters." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 10 }
+        }
+      },
+      "CustomerSearchHit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["customerId", "fullName", "phone", "phoneNational", "instagram", "facebook", "zalo", "tier", "lifetimeBookingCount", "noShowCount", "isBlocked", "lastBookingAt", "lastRoomClass", "matchedField", "matchedValue", "version"],
+        "properties": {
+          "customerId": { "type": "string" },
+          "fullName": { "type": ["string", "null"] },
+          "phone": { "type": ["string", "null"] },
+          "phoneNational": { "type": ["string", "null"] },
+          "instagram": { "type": ["string", "null"] },
+          "facebook": { "type": ["string", "null"] },
+          "zalo": { "type": ["string", "null"] },
+          "tier": { "$ref": "#/components/schemas/Tier" },
+          "lifetimeBookingCount": { "type": "integer", "minimum": 0 },
+          "noShowCount": { "type": "integer", "minimum": 0 },
+          "isBlocked": { "type": "boolean" },
+          "lastBookingAt": { "type": ["string", "null"], "description": "UTC ISO created_at of the latest counted booking (customers.last_counted_at)." },
+          "lastRoomClass": { "type": ["string", "null"] },
+          "matchedField": { "enum": ["facebook", "instagram", "zalo", "name", "phone", null] },
+          "matchedValue": { "type": ["string", "null"] },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "CustomerSearchResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["results"],
+        "properties": { "results": { "type": "array", "maxItems": 10, "items": { "$ref": "#/components/schemas/CustomerSearchHit" } } }
+      },
+      "SearchReindexRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "after": { "type": "string", "maxLength": 80, "description": "nextCursor of the previous page; omit for the first page." } }
+      },
+      "SearchReindexResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["indexed", "nextCursor"],
+        "properties": { "indexed": { "type": "integer", "minimum": 0 }, "nextCursor": { "type": ["string", "null"] } }
+      },
+      "PhoneChangeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["newPhone", "expectedVersion", "reason"],
+        "properties": {
+          "newPhone": { "type": "string", "maxLength": 32 },
+          "expectedVersion": { "type": "integer", "minimum": 1 },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 300 }
+        }
       },
       "CustomerPatch": {
         "type": "object",
