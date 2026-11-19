@@ -36,6 +36,7 @@
       "Hold": { "description": "Room hold (15-minute checkout lock)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HoldEnvelope" } } } },
       "Block": { "description": "Room block", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BlockEnvelope" } } } },
       "Entry": { "description": "Financial entry + booking projection", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EntryEnvelope" } } } },
+      "Transfer": { "description": "Both legs of a transfer between bookings + both bookings", "content": { "application/json": { "schema": { "type": "object", "additionalProperties": false, "required": ["transferId", "entries", "booking", "targetBooking", "replayed"], "properties": { "transferId": { "type": "string" }, "entries": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/components/schemas/FinancialEntry" } }, "booking": { "$ref": "#/components/schemas/Booking" }, "targetBooking": { "$ref": "#/components/schemas/Booking" }, "replayed": { "type": "boolean" } } } } } },
       "Promotion": { "description": "Promotion", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PromotionEnvelope" } } } },
       "Category": { "description": "Promotion category", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CategoryEnvelope" } } } },
       "SurchargeRule": { "description": "Surcharge rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SurchargeRuleEnvelope" } } } }
@@ -593,7 +594,10 @@
           "actor": { "$ref": "#/components/schemas/StaffRef" },
           "source": { "enum": ["admin", "legacy_backfill"] },
           "occurredAt": { "$ref": "#/components/schemas/Instant" },
-          "createdAt": { "$ref": "#/components/schemas/Instant" }
+          "createdAt": { "$ref": "#/components/schemas/Instant" },
+          "externalRef": { "$ref": "#/components/schemas/NullableString", "description": "bank / gateway transaction id — UNIQUE (409 DUPLICATE_EXTERNAL_REF)" },
+          "transferId": { "$ref": "#/components/schemas/NullableString", "description": "B10: both legs of a transfer between bookings share it" },
+          "counterpartBookingId": { "$ref": "#/components/schemas/NullableString", "description": "B10: the other booking of a transfer" }
         }
       },
       "EntryEnvelope": {
@@ -2375,6 +2379,38 @@
           }
         },
         "responses": { "201": { "$ref": "#/components/responses/Entry" }, "200": { "$ref": "#/components/responses/Entry" }, "default": { "$ref": "#/components/responses/Error" } }
+      }
+    },
+    "/internal/v1/bookings/{bookingId}/financial-entries/transfer": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "transferFinancialEntry",
+        "x-callers": ["admin-bff"],
+        "x-idempotency": "required",
+        "summary": "B10: move money already received on this booking to another LIVE booking (e.g. deposit of a cancelled booking re-created as a new one). One transaction, two entries sharing transferId: a refund here and a payment there, each with counterpartBookingId. 422 TRANSFER_EXCEEDS_RECEIVED above net received; 409 INVALID_STATE when the target is closed; legs are never reversed alone (409 TRANSFER_NOT_REVERSIBLE on reverse) — transfer back instead.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["toBookingId", "amount", "reason"],
+                "properties": {
+                  "toBookingId": { "type": "string" },
+                  "amount": { "type": "integer", "minimum": 1 },
+                  "reason": { "type": "string" },
+                  "method": { "enum": ["cash", "bank_transfer", "card", "ewallet", "other"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "$ref": "#/components/responses/Transfer" },
+          "200": { "$ref": "#/components/responses/Transfer" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
       }
     },
     "/internal/v1/bookings/{bookingId}/financial-entries/{entryId}/reverse": {
