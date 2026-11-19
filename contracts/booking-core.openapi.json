@@ -1097,10 +1097,49 @@
           "rooms": { "type": "array", "items": { "$ref": "#/components/schemas/GanttRoom" } }
         }
       },
+      "RosterNextCheckin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "guestName", "checkinAt", "numGuests", "bookingType", "status", "note", "closingNote", "gapMinutes"],
+        "properties": {
+          "id": { "type": "string" },
+          "guestName": { "type": "string" },
+          "checkinAt": { "$ref": "#/components/schemas/Instant" },
+          "numGuests": { "type": "integer", "minimum": 1 },
+          "bookingType": { "$ref": "#/components/schemas/BookingType" },
+          "status": { "enum": ["pending", "confirmed"] },
+          "note": { "$ref": "#/components/schemas/NullableString" },
+          "closingNote": { "$ref": "#/components/schemas/NullableString" },
+          "gapMinutes": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "HousekeepingTask": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["refId", "kind", "roomId", "roomName", "roomNumber", "roomClass", "guestName", "bookingType", "checkoutAt", "turnoverStartAt", "turnoverEndAt", "lateCheckoutHours", "note", "closingNote", "nextCheckin", "urgent"],
+        "properties": {
+          "refId": { "type": "string" },
+          "kind": { "enum": ["booking_checkout", "owner_stay"] },
+          "roomId": { "type": "string" },
+          "roomName": { "$ref": "#/components/schemas/NullableString" },
+          "roomNumber": { "$ref": "#/components/schemas/NullableString" },
+          "roomClass": { "$ref": "#/components/schemas/RoomClass" },
+          "guestName": { "type": "string" },
+          "bookingType": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/BookingType" }] },
+          "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+          "turnoverStartAt": { "$ref": "#/components/schemas/Instant" },
+          "turnoverEndAt": { "$ref": "#/components/schemas/Instant" },
+          "lateCheckoutHours": { "type": "integer" },
+          "note": { "$ref": "#/components/schemas/NullableString" },
+          "closingNote": { "$ref": "#/components/schemas/NullableString" },
+          "nextCheckin": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/RosterNextCheckin" }] },
+          "urgent": { "type": "boolean" }
+        }
+      },
       "RosterItem": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "roomId", "roomName", "roomNumber", "roomClass", "guestName", "phone", "instagram", "facebook", "zalo", "bookingType", "ratePlanCode", "checkinAt", "checkoutAt", "turnoverStartAt", "turnoverEndAt", "lateCheckoutHours", "totalPrice", "remainingAmount", "status", "loyaltySyncStatus", "loyaltyTier", "loyaltyStep", "closingNote", "note", "createdAt", "createdBy", "updatedAt", "version"],
+        "required": ["id", "roomId", "roomName", "roomNumber", "roomClass", "guestName", "phone", "instagram", "facebook", "zalo", "numGuests", "bookingType", "ratePlanCode", "checkinAt", "checkoutAt", "turnoverStartAt", "turnoverEndAt", "earlyCheckinHours", "lateCheckoutHours", "totalPrice", "remainingAmount", "isDeposit", "depositStatus", "channel", "status", "loyaltySyncStatus", "loyaltyTier", "loyaltyStep", "closingNote", "note", "nextCheckin", "createdAt", "createdBy", "updatedAt", "version"],
         "properties": {
           "id": { "type": "string" },
           "roomId": { "type": "string" },
@@ -1112,21 +1151,27 @@
           "instagram": { "$ref": "#/components/schemas/NullableString" },
           "facebook": { "$ref": "#/components/schemas/NullableString" },
           "zalo": { "$ref": "#/components/schemas/NullableString" },
+          "numGuests": { "type": "integer", "minimum": 1 },
           "bookingType": { "$ref": "#/components/schemas/BookingType" },
           "ratePlanCode": { "$ref": "#/components/schemas/RatePlanCode" },
           "checkinAt": { "$ref": "#/components/schemas/Instant" },
           "checkoutAt": { "$ref": "#/components/schemas/Instant" },
           "turnoverStartAt": { "$ref": "#/components/schemas/Instant" },
           "turnoverEndAt": { "$ref": "#/components/schemas/Instant" },
+          "earlyCheckinHours": { "type": "integer" },
           "lateCheckoutHours": { "type": "integer" },
           "totalPrice": { "$ref": "#/components/schemas/Vnd" },
           "remainingAmount": { "$ref": "#/components/schemas/Vnd" },
+          "isDeposit": { "type": "boolean" },
+          "depositStatus": { "enum": ["none", "deposit_paid", "fully_paid"] },
+          "channel": { "$ref": "#/components/schemas/NullableString" },
           "status": { "enum": ["pending", "confirmed"] },
           "loyaltySyncStatus": { "$ref": "#/components/schemas/LoyaltySyncStatus" },
           "loyaltyTier": { "$ref": "#/components/schemas/NullableString" },
           "loyaltyStep": { "type": ["integer", "null"] },
           "closingNote": { "$ref": "#/components/schemas/NullableString" },
           "note": { "$ref": "#/components/schemas/NullableString" },
+          "nextCheckin": { "oneOf": [{ "type": "null" }, { "$ref": "#/components/schemas/RosterNextCheckin" }] },
           "createdAt": { "$ref": "#/components/schemas/Instant" },
           "createdBy": { "$ref": "#/components/schemas/StaffRef" },
           "updatedAt": { "$ref": "#/components/schemas/Instant" },
@@ -1136,10 +1181,11 @@
       "Roster": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["date", "summary", "checkins", "checkouts", "blocks"],
+        "required": ["date", "summary", "checkins", "checkouts", "blocks", "housekeepingTasks"],
         "properties": {
           "date": { "$ref": "#/components/schemas/BusinessDate" },
           "blocks": { "type": "array", "description": "Active room blocks overlapping the business date (front desk: rooms out of order / closed).", "items": { "$ref": "#/components/schemas/Block" } },
+          "housekeepingTasks": { "type": "array", "description": "Confirmed checkouts and ending owner_stay blocks ordered by turnoverStartAt.", "items": { "$ref": "#/components/schemas/HousekeepingTask" } },
           "summary": {
             "type": "object",
             "additionalProperties": false,
@@ -2362,7 +2408,7 @@
     "/internal/v1/daily-roster": {
       "get": {
         "operationId": "dailyRoster",
-        "x-callers": ["admin-bff"],
+        "x-callers": ["admin-bff", "agent-core"],
         "parameters": [{ "name": "date", "in": "query", "schema": { "$ref": "#/components/schemas/BusinessDate" } }],
         "responses": {
           "200": { "description": "Check-ins / check-outs of the business date", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Roster" } } } },
