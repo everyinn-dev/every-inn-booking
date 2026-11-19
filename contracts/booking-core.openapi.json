@@ -1920,7 +1920,7 @@
         "operationId": "modifyBooking",
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
-        "summary": "Change room/time/guests/notes (expectedVersion). Moves inventory atomically, re-prices, re-evaluates the promotion snapshot (dropPromotion=true to remove it). Phone is immutable. The booking type is LOCKED (422 BOOKING_TYPE_LOCKED: cancel + re-create instead). Changing a custom price or an incidental charge needs `reason` (400 REASON_REQUIRED); the BOOKING_UPDATED audit keeps before/after of the money/time fields.",
+        "summary": "Change room/time/guests/notes (expectedVersion). Moves inventory atomically, re-prices, re-evaluates the promotion snapshot (dropPromotion=true to remove it). Phone is immutable. The booking type is LOCKED (422 BOOKING_TYPE_LOCKED: cancel + re-create instead). Changing a custom price or an incidental charge needs `reason` (400 REASON_REQUIRED); the BOOKING_UPDATED audit keeps before/after of the money/time fields. EI-FINANCE-ONTOLOGY-001 Q2: when re-pricing a stay change gives a different total for the agreed price (keep_agreed) and today's table (current_rates), `pricingMode` is required (422 PRICING_MODE_REQUIRED with both totals) together with `reason` (400 REASON_REQUIRED). F10: once checkout has passed the stay itself (time/room/guests/price) is frozen (409 PAST_CHECKOUT); notes, charges and the ledger stay open.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": {
           "required": true,
@@ -1935,7 +1935,8 @@
                   "customPrice": { "type": "integer" },
                   "incidentalFee": { "type": "integer" },
                   "incidentalReason": { "type": "string" },
-                  "reason": { "type": "string", "description": "Required when a custom price or an incidental charge changes." },
+                  "reason": { "type": "string", "description": "Required when a custom price or an incidental charge changes, and when a pricingMode choice is required." },
+                  "pricingMode": { "type": "string", "enum": ["keep_agreed", "current_rates"], "description": "keep_agreed: the agreed price for what did not change + today's table for the change; current_rates: the whole stay at today's table." },
                   "dropPromotion": { "type": "boolean" }
                 }
               }
@@ -2278,6 +2279,58 @@
         }
       }
     },
+    "/internal/v1/bookings/{bookingId}/modify-quote": {
+      "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
+      "post": {
+        "operationId": "modifyQuote",
+        "x-callers": ["admin-bff"],
+        "summary": "Read-only preview of a stay edit (EI-FINANCE-ONTOLOGY-001 Q2): both prices staff can choose from (keepAgreed is null for a custom price) and the balance against money already received. Same validation as PATCH; writes nothing.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "roomId": { "type": "string" },
+                  "checkinAt": { "$ref": "#/components/schemas/Instant" },
+                  "checkoutAt": { "$ref": "#/components/schemas/Instant" },
+                  "earlyCheckinHours": { "type": "integer" },
+                  "lateCheckoutHours": { "type": "integer" },
+                  "numGuests": { "type": "integer" },
+                  "customPrice": { "type": "integer" },
+                  "dropPromotion": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Both prices of the edit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["bookingId", "currentTotal", "netReceived", "pastCheckout", "currentRates", "keepAgreed", "choiceRequired"],
+                  "properties": {
+                    "bookingId": { "type": "string" },
+                    "currentTotal": { "type": "integer" },
+                    "netReceived": { "type": "integer" },
+                    "pastCheckout": { "type": "boolean" },
+                    "currentRates": { "type": "object", "additionalProperties": false, "required": ["total", "basePrice", "holidaySurcharge", "extraGuestFee", "extraFee", "promotionDiscount", "loyaltyDiscount", "promotionDropped", "balance"], "properties": { "total": { "type": "integer" }, "basePrice": { "type": "integer" }, "holidaySurcharge": { "type": "integer" }, "extraGuestFee": { "type": "integer" }, "extraFee": { "type": "integer" }, "promotionDiscount": { "type": "integer" }, "loyaltyDiscount": { "type": "integer" }, "promotionDropped": { "type": "boolean" }, "balance": { "type": "integer", "description": "total − net received: > 0 still to collect, < 0 to refund" } } },
+                    "keepAgreed": { "oneOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["total", "basePrice", "holidaySurcharge", "extraGuestFee", "extraFee", "promotionDiscount", "loyaltyDiscount", "promotionDropped", "balance"], "properties": { "total": { "type": "integer" }, "basePrice": { "type": "integer" }, "holidaySurcharge": { "type": "integer" }, "extraGuestFee": { "type": "integer" }, "extraFee": { "type": "integer" }, "promotionDiscount": { "type": "integer" }, "loyaltyDiscount": { "type": "integer" }, "promotionDropped": { "type": "boolean" }, "balance": { "type": "integer", "description": "total − net received: > 0 still to collect, < 0 to refund" } } }] },
+                    "choiceRequired": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/internal/v1/bookings/{bookingId}/financial-entries": {
       "parameters": [{ "$ref": "#/components/parameters/BookingId" }],
       "get": {
@@ -2300,7 +2353,7 @@
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
         "x-required-role": "manager for entryType=adjustment",
-        "summary": "deposit | payment | refund (≤ net received) | adjustment (signed, manager, reason). Projection updated in the same transaction.",
+        "summary": "deposit | payment | refund (≤ net received) | adjustment (signed, manager, reason). Projection updated in the same transaction. occurredAt = when the money actually moved; never in the future (400 OCCURRED_IN_FUTURE).",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": {
           "required": true,
@@ -2331,7 +2384,7 @@
         "x-callers": ["admin-bff"],
         "x-idempotency": "required",
         "x-required-role": "manager",
-        "summary": "Correction by an opposite entry; each entry is reversible once (DB UNIQUE); reversals are not reversible.",
+        "summary": "Correction by an opposite entry; each entry is reversible once (DB UNIQUE); reversals are not reversible. Reversing money in that was already refunded is refused (422 REVERSAL_EXCEEDS_NET): reverse the refund first.",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string" } } } } } },
         "responses": { "201": { "$ref": "#/components/responses/Entry" }, "200": { "$ref": "#/components/responses/Entry" }, "default": { "$ref": "#/components/responses/Error" } }
