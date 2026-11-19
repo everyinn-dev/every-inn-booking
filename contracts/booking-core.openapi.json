@@ -1759,15 +1759,16 @@
           "default": { "$ref": "#/components/responses/Error" }
         },
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": ["receivedAmount"],
                 "properties": {
                   "paymentMethod": { "$ref": "#/components/schemas/PaymentMethod" },
                   "paymentReference": { "type": "string" },
-                  "receivedAmount": { "type": "integer", "minimum": 0, "description": "LSB: money actually received; short → deposit, over → recorded as received" },
+                  "receivedAmount": { "type": "integer", "minimum": 0, "description": "Money actually received (EI-FINANCE-ONTOLOGY-001 Q4: required, 0 allowed). 0 → unpaid booking; short → deposit of that amount; full/over → payment as received. Missing → 400 RECEIVED_AMOUNT_REQUIRED." },
                   "externalRef": { "type": "string", "description": "bank / gateway transaction id" }
                 }
               }
