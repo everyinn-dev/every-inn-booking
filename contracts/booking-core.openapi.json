@@ -41,6 +41,7 @@
       "SurchargeRule": { "description": "Surcharge rule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SurchargeRuleEnvelope" } } } }
     },
     "schemas": {
+      "RevenueCell": { "type": "object", "additionalProperties": false, "required": ["room", "charges", "retained", "restate", "total", "units", "occupiedDays", "bookings", "receivable", "overpaid"], "properties": { "room": { "type": "integer", "description": "ROOM: room net (after promotion & loyalty)" }, "charges": { "type": "integer", "description": "CHARGE − CHARGE_VOID by the day recorded / voided" }, "retained": { "type": "integer", "description": "RETAINED (closure day) + RETAINED_ADJ (later ledger days)" }, "restate": { "type": "integer", "description": "drift of locked months, only in the first open month" }, "total": { "type": "integer", "description": "room + charges + retained + restate" }, "units": { "type": "integer", "description": "nights / day-uses sold" }, "occupiedDays": { "type": "integer" }, "bookings": { "type": "integer" }, "receivable": { "type": "integer", "description": "reconciliation, not revenue: still due on live bookings by check-in month" }, "overpaid": { "type": "integer", "description": "reconciliation, not revenue: held above the booking value" } } },
       "Instant": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$" },
       "NullableInstant": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$" },
       "BusinessDate": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
@@ -1759,15 +1760,16 @@
           "default": { "$ref": "#/components/responses/Error" }
         },
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": ["receivedAmount"],
                 "properties": {
                   "paymentMethod": { "$ref": "#/components/schemas/PaymentMethod" },
                   "paymentReference": { "type": "string" },
-                  "receivedAmount": { "type": "integer", "minimum": 0, "description": "LSB: money actually received; short → deposit, over → recorded as received" },
+                  "receivedAmount": { "type": "integer", "minimum": 0, "description": "Money actually received (EI-FINANCE-ONTOLOGY-001 Q4: required, 0 allowed). 0 → unpaid booking; short → deposit of that amount; full/over → payment as received. Missing → 400 RECEIVED_AMOUNT_REQUIRED." },
                   "externalRef": { "type": "string", "description": "bank / gateway transaction id" }
                 }
               }
@@ -2320,10 +2322,11 @@
       "get": {
         "operationId": "revenueMatrix",
         "x-callers": ["admin-bff"],
-        "summary": "Room x month revenue pivot (manager role enforced server-side, 403 FORBIDDEN_ROLE otherwise). Revenue = SUM(total_price) of confirmed bookings grouped by the Asia/Ho_Chi_Minh month of checkin_at. retained = SUM(paid_amount - refund_amount) of cancelled / no_show bookings (money kept after closing), same month basis. Defaults to the current month + 3 preceding; max 24 months.",
+        "summary": "Room x month revenue per EI-FINANCE-ONTOLOGY-001 (manager role enforced server-side, 403 FORBIDDEN_ROLE otherwise). basis=checkin (ĐN1, default): room net in the Asia/Ho_Chi_Minh business month of check-in; basis=night (ĐN2): room net split over the nights of the stay. Both add stay charges on the day recorded (voids negative on the void day) and money retained from cancelled / no-show bookings on the closure day. Months locked after the 5th of the next month are served frozen; their later drift is `restate` in the first open month. values/total/columnTotals/grandTotal are cell totals. Defaults to the current month + 3 preceding; max 24 months.",
         "parameters": [
           { "name": "from", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } },
-          { "name": "to", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } }
+          { "name": "to", "in": "query", "schema": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$" } },
+          { "name": "basis", "in": "query", "schema": { "type": "string", "enum": ["checkin", "night"], "default": "checkin" } }
         ],
         "responses": {
           "200": {
@@ -2333,31 +2336,39 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["from", "to", "months", "basis", "status", "rooms", "columnTotals", "grandTotal", "bookingCount", "retained"],
+                  "required": ["from", "to", "months", "basis", "status", "monthMeta", "rooms", "columnTotals", "columns", "grandTotal", "grand", "bookingCount", "retained"],
                   "properties": {
                     "from": { "type": "string" },
                     "to": { "type": "string" },
                     "months": { "type": "array", "items": { "type": "string" } },
-                    "basis": { "type": "string", "enum": ["checkin_at"] },
+                    "basis": { "type": "string", "enum": ["checkin", "night"] },
                     "status": { "type": "string", "enum": ["confirmed"] },
+                    "monthMeta": {
+                      "type": "array",
+                      "items": { "type": "object", "additionalProperties": false, "required": ["month", "locked", "daysInMonth"], "properties": { "month": { "type": "string" }, "locked": { "type": "boolean" }, "daysInMonth": { "type": "integer" } } }
+                    },
                     "rooms": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "additionalProperties": false,
-                        "required": ["roomId", "roomNumber", "roomClass", "floor", "values", "total"],
+                        "required": ["roomId", "roomNumber", "roomClass", "floor", "values", "total", "cells", "totals"],
                         "properties": {
                           "roomId": { "type": "string" },
                           "roomNumber": { "type": "string" },
                           "roomClass": { "type": "string" },
                           "floor": { "type": "integer" },
                           "values": { "type": "array", "items": { "type": "integer" } },
-                          "total": { "type": "integer" }
+                          "total": { "type": "integer" },
+                          "cells": { "type": "array", "items": { "$ref": "#/components/schemas/RevenueCell" } },
+                          "totals": { "$ref": "#/components/schemas/RevenueCell" }
                         }
                       }
                     },
                     "columnTotals": { "type": "array", "items": { "type": "integer" } },
+                    "columns": { "type": "array", "items": { "$ref": "#/components/schemas/RevenueCell" } },
                     "grandTotal": { "type": "integer" },
+                    "grand": { "$ref": "#/components/schemas/RevenueCell" },
                     "bookingCount": { "type": "integer" },
                     "retained": {
                       "type": "object",
