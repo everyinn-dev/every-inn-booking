@@ -2354,10 +2354,10 @@
       },
       "post": {
         "operationId": "recordFinancialEntry",
-        "x-callers": ["admin-bff"],
+        "x-callers": ["admin-bff", "agent-core"],
         "x-idempotency": "required",
         "x-required-role": "manager for entryType=adjustment",
-        "summary": "deposit | payment | refund (≤ net received) | adjustment (signed, manager, reason). Projection updated in the same transaction. occurredAt = when the money actually moved; never in the future (400 OCCURRED_IN_FUTURE).",
+        "summary": "deposit | payment | refund (≤ net received) | adjustment (signed, manager, reason). Projection updated in the same transaction. occurredAt = when the money actually moved; never in the future (400 OCCURRED_IN_FUTURE). agent-core (Telegram ✅ on the extension-fee card) may record ONLY a payment, only for a real staff actor (403 HUMAN_APPROVAL_REQUIRED for the AI account, 403 FORBIDDEN_FOR_CALLER for any other type) and never above the amount still due (422 PAYMENT_EXCEEDS_DUE).",
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": {
           "required": true,
