@@ -11,6 +11,8 @@ export interface GoogleReview {
   photos: string[];
 }
 
+// MANUAL values, not realtime. `rating` drives the number, the partial-fill stars and the
+// AggregateRating JSON-LD (HotelSchema); update rating/count together, then deploy.
 export const GOOGLE_REVIEWS_SOURCE = {
   rating: 5.0,
   count: 31,

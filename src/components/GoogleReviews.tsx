@@ -14,8 +14,25 @@ function GoogleG({ size = 18 }: { size?: number }) {
 
 const STARS = '★★★★★';
 
+/** 5 stars, each filled proportionally: 4.8 → 4 full + the 5th at 80%. */
+function StarMeter({ rating }: { rating: number }) {
+  return (
+    <div className="gr-meter" aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((i) => {
+        const fill = Math.min(1, Math.max(0, rating - i)) * 100;
+        return (
+          <span key={i} className="gr-star" style={{ '--fill': `${fill}%` } as React.CSSProperties}>
+            ★
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function GoogleReviews() {
   const { rating, count, url } = GOOGLE_REVIEWS_SOURCE;
+  const ratingText = rating.toFixed(1).replace('.', ',');
   return (
     <section id="reviews" className="gr-section" aria-labelledby="gr-heading">
       <div className="container">
@@ -28,10 +45,14 @@ export default function GoogleReviews() {
         </div>
 
         <div className="gr-layout">
-          <aside className="gr-score" aria-label={`Điểm Google ${rating} trên 5 sao, ${count} đánh giá`}>
-            <div className="gr-score-num">{rating.toFixed(1).replace('.', ',')}</div>
-            <div className="gr-stars" aria-hidden="true">{STARS}</div>
-            <div className="gr-score-count">{count} đánh giá</div>
+          <aside className="gr-score" aria-label={`Điểm Google ${ratingText} trên 5 sao, trên ${count} đánh giá`}>
+            <div className="gr-score-title">Rating</div>
+            <div className="gr-score-num" aria-hidden="true">
+              {ratingText}
+              <span className="gr-score-max">/5</span>
+            </div>
+            <StarMeter rating={rating} />
+            <div className="gr-score-count" aria-hidden="true">trên {count} đánh giá</div>
             <a className="gr-score-link" href={url} target="_blank" rel="noopener noreferrer">
               Xem trên Google Maps
             </a>
