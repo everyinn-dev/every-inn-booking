@@ -1,4 +1,5 @@
 import React from 'react';
+import { GOOGLE_REVIEWS_SOURCE } from '../data/reviews';
 
 export default function HotelSchema() {
   const schema = {
@@ -59,6 +60,14 @@ export default function HotelSchema() {
       '@type': 'GeoCoordinates',
       latitude: 10.7998889,
       longitude: 106.6863418,
+    },
+    // Real Google Maps figures (see src/data/reviews.ts) — keep in sync, never invent.
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: GOOGLE_REVIEWS_SOURCE.rating,
+      reviewCount: GOOGLE_REVIEWS_SOURCE.count,
+      bestRating: 5,
+      worstRating: 1,
     },
     hasMap: 'https://maps.app.goo.gl/pVwBsHvNMaGWDGZz8',
     sameAs: [
