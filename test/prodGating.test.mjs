@@ -81,7 +81,7 @@ describe("production gating invariants", () => {
     assert.match(home, /bookingOn && <HomeBooking \/>/);
     assert.match(home, /<Header showSelfBooking=\{bookingOn\} \/>/);
     assert.match(home, /<Footer showSelfBooking=\{bookingOn\} \/>/);
-    assert.match(home, /<LoyaltyLookup comingSoon=\{!loyaltyOn\} \/>/);
+    assert.match(home, /loyaltyOn && <LoyaltyLookup comingSoon=\{false\} \/>/);
 
     const room = readFileSync(resolve("../src/app/room/[id]/page.tsx"), "utf8");
     assert.match(room, /export const dynamic = ["']force-dynamic["']/);
