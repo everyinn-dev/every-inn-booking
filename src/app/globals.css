@@ -2496,7 +2496,23 @@ ul {
   border-radius: var(--radius);
   text-align: center;
 }
+.gr-score-title {
+  font-size: var(--fz-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-gray-600);
+}
 .gr-score-num { font-size: 56px; font-weight: 700; line-height: 1; }
+.gr-score-max { font-size: var(--fz-md); font-weight: 500; color: var(--c-gray-400); margin-left: 2px; }
+.gr-meter { display: inline-flex; gap: 3px; font-size: 22px; line-height: 1; }
+.gr-star {
+  background: linear-gradient(90deg, var(--c-accent) var(--fill), var(--c-gray-200) var(--fill));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
 .gr-stars { color: var(--c-accent); letter-spacing: 2px; font-size: var(--fz-base); }
 .gr-score-count { font-size: var(--fz-sm); color: var(--c-gray-600); }
 .gr-score-link {
@@ -2573,6 +2589,7 @@ ul {
     gap: 6px 14px;
     padding: var(--sp-sm);
   }
+  .gr-score-title { flex-basis: 100%; }
   .gr-score-num { font-size: 40px; }
   .gr-card { flex-basis: 82vw; }
 }
