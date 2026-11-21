@@ -3,6 +3,7 @@ import Hero from '../components/Hero';
 import Rooms from '../components/Rooms';
 import Pricing from '../components/Pricing';
 import LoyaltyLookup from '../components/LoyaltyLookup';
+import GoogleReviews from '../components/GoogleReviews';
 import Location from '../components/Location';
 import Footer from '../components/Footer';
 import HomeBooking from '../components/booking/HomeBooking';
@@ -22,6 +23,7 @@ export default async function Home() {
       <Pricing />
       {/* Loyalty lookup: interactive when LOYALTY_ENABLED=true (dev), Coming Soon teaser mode when false (prod). */}
       <LoyaltyLookup comingSoon={!loyaltyOn} />
+      <GoogleReviews />
       <Location />
       <Footer showSelfBooking={bookingOn} />
     </>
