@@ -20,11 +20,12 @@ export default async function Home() {
       {/* LSB-4: omitted completely when WEB_BOOKING_ENABLED=false so prod guests see no self-booking UI */}
       {bookingOn && <HomeBooking />}
       <Rooms />
-      <Pricing />
-      {/* Loyalty lookup: interactive when LOYALTY_ENABLED=true (dev), Coming Soon teaser mode when false (prod). */}
-      <LoyaltyLookup comingSoon={!loyaltyOn} />
+      {/* Loyalty lookup (hạng thành viên & tem): shown only when LOYALTY_ENABLED=true (dev).
+          Omitted completely when false (prod) — set LOYALTY_ENABLED="true" in wrangler.jsonc to bring it back. */}
+      {loyaltyOn && <LoyaltyLookup comingSoon={false} />}
       <GoogleReviews />
       <Location />
+      <Pricing />
       <Footer showSelfBooking={bookingOn} />
     </>
   );
